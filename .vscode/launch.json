@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug memtool",
+            "program": "${workspaceFolder:memtool}/.build/debug/memtool",
+            "args": [],
+            "cwd": "${workspaceFolder:memtool}",
+            "preLaunchTask": "swift: Build Debug memtool"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Release memtool",
+            "program": "${workspaceFolder:memtool}/.build/release/memtool",
+            "args": [],
+            "cwd": "${workspaceFolder:memtool}",
+            "preLaunchTask": "swift: Build Release memtool"
+        }
+    ]
+}
