@@ -5,15 +5,14 @@ import PackageDescription
 
 let package = Package(
     name: "memtool",
-    dependencies: [
-        // Dependencies declare other packages that this package depends on.
-        // .package(url: /* package url */, from: "1.0.0"),
+    products: [
+        .library(name: "CoreMemtool", targets: ["CoreMemtool"]),
+        .executable(name: "memtool", targets: ["memtool"])
     ],
     targets: [
         .target(name: "Cutils"),
-        .executableTarget(
-            name: "memtool",
-            dependencies: ["Cutils"]),
+        .target(name: "CoreMemtool", dependencies: ["Cutils"]),
+        .executableTarget(name: "memtool", dependencies: ["CoreMemtool"]),
     ]
 )
 

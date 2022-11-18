@@ -12,11 +12,21 @@ extension malloc_chunk {
     }
 
     /// Previous chunk is in use - if set, the previous chunk is still being used by the application, and thus the prev_size field is invalid. Note - some chunks, such as those in fastbins (see below) will have this bit set despite being free'd by the application. This bit really means that the previous chunk should not be considered a candidate for coalescing - it's "in use" by either the application or some other optimization layered atop malloc's original code :-)
-    var isPreviousFree: Bool {
+    var isPreviousInUse: Bool {
         unsafeBitCast(self.mchunk_size, to: UInt64.self) & 0b1 > 0
     }
 
     var size: UInt64 {
         unsafeBitCast(self.mchunk_size, to: UInt64.self) & (0xffffffffffffffff ^ 0b111)
+    }
+}
+
+struct Chunk {
+    let header: malloc_chunk
+    let content: RawRemoteMemory
+
+    init(pid: Int32, baseAddress: UInt64) {
+        self.header = BoundRemoteMemory<malloc_chunk>(pid: pid, load: baseAddress).buffer
+        self.content = RawRemoteMemory(pid: pid, load: baseAddress..<(baseAddress + header.size))
     }
 }
