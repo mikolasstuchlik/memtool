@@ -1,8 +1,8 @@
 public struct RawRemoteMemory {
-    let segment: MemoryRange
-    let buffer: ContiguousArray<UInt8>
+    public let segment: MemoryRange
+    public let buffer: ContiguousArray<UInt8>
 
-    init(pid: Int32, load segment: MemoryRange) {
+    public init(pid: Int32, load segment: MemoryRange) {
         self.segment = segment
         var buffer = ContiguousArray<UInt8>.init(repeating: 0, count: segment.count)
         swift_inspect_bridge__ptrace_peekdata_initialize(pid, segment.startIndex, &buffer)
@@ -13,23 +13,23 @@ public struct RawRemoteMemory {
 /// - Warning: The buffer has to be C layouted struct! If you use Swift native type, youre in 
 /// risk of memory corruption!
 public struct BoundRemoteMemory<T> {
-    let segment: MemoryRange
-    let buffer: T
+    public let segment: MemoryRange
+    public let buffer: T
 
-    init(pid: Int32, load baseAddress: UInt64, initialValue: T) {
+    public init(pid: Int32, load baseAddress: UInt64, initialValue: T) {
         self.segment = baseAddress..<(baseAddress + UInt64(MemoryLayout<T>.size))
         var buffer = initialValue
         swift_inspect_bridge__ptrace_peekdata_initialize(pid, baseAddress, &buffer)
         self.buffer = buffer
     }
 
-    init(pid: Int32, load baseAddress: UInt64) {
+    public init(pid: Int32, load baseAddress: UInt64) {
         let segment = baseAddress..<(baseAddress + UInt64(MemoryLayout<T>.size))
         let rawRemote = RawRemoteMemory(pid: pid, load: segment)
         self.init(bind: rawRemote)!
     }
 
-    init?(bind rawMemory: RawRemoteMemory) {
+    public init?(bind rawMemory: RawRemoteMemory) {
         guard rawMemory.buffer.count == MemoryLayout<T>.size else {
             error("Error: Attempted to bind \(rawMemory) to differently sized type \(String(describing: T.self))")
             error("Error: \(rawMemory.buffer.count) =/= \(MemoryLayout<T>.size)")
@@ -37,13 +37,14 @@ public struct BoundRemoteMemory<T> {
         }
 
         self.segment = rawMemory.segment
-        self.buffer = withUnsafeBytes(of: rawMemory.buffer) { ptr in
-            let rebound = ptr.assumingMemoryBound(to: T.self)
-            return rebound.first!    
+        self.buffer = rawMemory.buffer.withUnsafeBufferPointer { ptr in
+            return ptr.withMemoryRebound(to: T.self) {
+                return $0.first!
+            }    
         }
     }
 
-    init?(bindFromLarger rawMemory: RawRemoteMemory) {
+    public init?(bindFromLarger rawMemory: RawRemoteMemory) {
         guard rawMemory.buffer.count >= MemoryLayout<T>.size else {
             error("Error: Attempted to bind \(rawMemory) to differently larger type \(String(describing: T.self))")
             error("Error: \(rawMemory.buffer.count) < \(MemoryLayout<T>.size)")

@@ -53,7 +53,7 @@ Map:
 \(map?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
 
 Unloaded Symbols:
-\(unloadedSymbols?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+\(unloadedSymbols?.flatMap({ $1 }).map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
 
 Symbols:
 \(symbols?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")

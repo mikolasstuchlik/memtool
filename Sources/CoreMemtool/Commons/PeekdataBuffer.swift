@@ -21,10 +21,12 @@ func swift_inspect_bridge__ptrace_peekdata_initialize<T>(_ pid: pid_t, _ baseAdd
 }
 
 func swift_inspect_bridge__ptrace_peekdata_initialize(_ pid: pid_t, _ baseAddress : UInt64, _ buffer: inout ContiguousArray<UInt8>) {
-    swift_inspect_bridge__ptrace_peekdata_buffer(
-        pid, 
-        baseAddress, 
-        UInt64(buffer.count), 
-        &buffer
-    )
+    buffer.withUnsafeMutableBufferPointer { ptr in
+        swift_inspect_bridge__ptrace_peekdata_buffer(
+            pid, 
+            baseAddress, 
+            UInt64(ptr.count), 
+            ptr.baseAddress!
+        )
+    }
 }

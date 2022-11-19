@@ -1,5 +1,6 @@
 import Foundation
 import CoreMemtool
+import Cutils
 
 @main
 enum memtool {
@@ -26,7 +27,9 @@ let operations: [Operation] = [
     mapOperation,
     symbolOperation,
     helpOperation,
-    exitOperation
+    exitOperation,
+    lookupOperation,
+    peekOperation
 ]
 
 let helpOperation = Operation(keyword: "help", help: "Shows available commands on stdout.") { input, ctx -> Bool in
@@ -83,16 +86,33 @@ let detachOperation = Operation(keyword: "detach", help: "Detached from attached
     return true
 }
 
-let statusOperation = Operation(keyword: "status", help: "Prints current session to stdout.") { input, ctx -> Bool in
-    guard input == "status" else {
+let statusOperation = Operation(keyword: "status", help: "[-m|-u|-l] Prints current session to stdout. Use -m for map, -u for unloaded symbols and -l for loaded symbols.") { input, ctx -> Bool in
+    guard input.hasPrefix("status") else {
+        return false
+    }
+    let suffix = input.trimmingPrefix("status").trimmingCharacters(in: .whitespaces)
+    guard suffix.isEmpty || suffix == "-m" || suffix == "-u" || suffix == "-l" else {
         return false
     }
 
-    if let session = ctx.session {
-        print(session.cliPrint)
-    } else {
+    guard let session = ctx.session else {
         print("idle")
+        return true
     }
+
+    switch suffix {
+    case "":
+        print(session.cliPrint)
+    case "-m":
+        print(session.map?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+    case "-u": break
+        print(session.unloadedSymbols?.flatMap({ $1 }).map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+    case "-l":
+        print(session.symbols?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+    default:
+        return false
+    }
+
 
     return true
 }
@@ -108,6 +128,15 @@ let mapOperation = Operation(keyword: "map", help: "Parse /proc/pid/maps file.")
     }
 
     session.map = Map.getMap(for: session.pid)
+    session.fileBasePoints = [:]
+    for map in session.map ?? [] {
+        if map.properties.pathname.hasPrefix("[") || map.properties.pathname.hasSuffix("[") || map.properties.pathname.isEmpty {
+            continue
+        }
+
+        let current = session.fileBasePoints?[map.properties.pathname]
+        session.fileBasePoints?[map.properties.pathname] = current.flatMap { min($0, map.range.lowerBound) } ?? map.range.lowerBound
+    }
 
     return true
 }
@@ -122,38 +151,93 @@ let symbolOperation = Operation(keyword: "symbol", help: "Requires maps. Loads a
         return true
     }
 
-    guard let maps = session.map else {
+    guard let maps = session.fileBasePoints else {
         print("Error: Need to load map first!")
         return true
     }
 
-    print("Loading symbols.")
-    let potentialFiles = Set(maps.map(\.properties.pathname)).filter { !$0.isEmpty }
-    print("Maps read.")
-    let suffixSo = potentialFiles.filter {
-        guard let last = $0.components(separatedBy: "/").last else {
-            return false
+    let files = Array(maps.keys)
+
+    session.unloadedSymbols = [:]
+    for file in files {
+        session.unloadedSymbols?[file] = Symbolication.loadSymbols(for: file)
+    }
+
+    session.symbols = []
+    session.symbols?.reserveCapacity( session.unloadedSymbols?.values.map(\.count).reduce(0, +) ?? 0)
+    for (file, unloaded) in session.unloadedSymbols ?? [:] {
+        for symbol in unloaded {
+            SymbolRegion(unloadedSymbol: symbol, fileBasePoints: maps).flatMap { session.symbols?.append($0) }
         }
-
-        return last.contains(".so.") || last.hasSuffix(".so")
-    }
-    print("Searching symbols for files: \(suffixSo)")
-
-    var unloaded = [UnloadedSymbolInfo]()
-    for file in suffixSo {
-        print("Loading symbols for file \(file) ...", terminator: " ")
-        let sym = Symbolication.loadSymbols(for: file)
-        print("\(sym.count) symbols loaded.")
-        unloaded.append(contentsOf: sym)
     }
 
-    session.unloadedSymbols = unloaded
+    return true
+}
 
-    print("Applyiong symbols to regions...", terminator: " ")
-    session.symbols = unloaded.compactMap { symbol in
-        SymbolRegion(unloadedSymbol: symbol, map: maps)
+let lookupOperation = Operation(keyword: "lookup", help: "[-e] \"[text]\" searches symbols matching text. Use -e if you want only exact matches.") { input, ctx -> Bool in
+    guard input.hasPrefix("lookup") else {
+        return false
     }
-    print("[done]")
+    let exact = input.trimmingPrefix("lookup").trimmingCharacters(in: .whitespaces).hasPrefix("-e")
+    let text = input.trimmingPrefix("lookup").trimmingCharacters(in: .whitespaces).trimmingPrefix("-e").trimmingCharacters(in: .whitespaces)
+    guard text.hasPrefix("\""), text.hasSuffix("\"") else {
+        return false
+    }
+    let textToSearch = text.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+    guard !textToSearch.isEmpty else {
+        return false
+    }
+
+    guard let session = ctx.session else {
+        print("Error: Not attached to a session!")
+        return true
+    }
+
+    if exact {
+        print("Unloaded symbols: ")
+        print(session.unloadedSymbols?.flatMap({ $1 }).filter { $0.name == textToSearch }.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+        print("Loaded symbols: ")
+        print(session.symbols?.filter { $0.properties.name == textToSearch }.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+    } else {
+        print("Unloaded symbols: ")
+        print(session.unloadedSymbols?.flatMap({ $1 }).filter { $0.name.contains(textToSearch) }.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+        print("Loaded symbols: ")
+        print(session.symbols?.filter { $0.properties.name.contains(textToSearch) }.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+    }
+
+    return true
+}
+
+let peekableTypes: [Any.Type] = [malloc_state.self, malloc_chunk.self, heap_info.self]
+let peekOperation = Operation(keyword: "peek", help: "[typename] [hexa pointer] Peeks ans bind a memory to any of following types: \(peekableTypes.map { String(describing: $0) })") { input, ctx -> Bool in
+    guard input.hasPrefix("peek") else {
+        return false
+    }
+    let payload = input.trimmingPrefix("peek").trimmingCharacters(in: .whitespaces)
+    let components = payload.components(separatedBy: " ")
+
+    guard components.count == 2, let base = UInt64(components[1].trimmingPrefix("0x"), radix: 16) else {
+        return false
+    }
+
+    guard let session = ctx.session else {
+        print("Error: Not attached to a session!")
+        return true
+    }
+
+    switch components[0] {
+    case String(describing: malloc_state.self):
+        print(BoundRemoteMemory<malloc_state>(pid: session.pid, load: base))
+    
+    case String(describing: malloc_chunk.self):
+        print(BoundRemoteMemory<malloc_chunk>(pid: session.pid, load: base))
+    
+    case String(describing: heap_info.self):
+        print(BoundRemoteMemory<heap_info>(pid: session.pid, load: base))
+    
+    default:
+        return false
+    }
 
     return true
 }
