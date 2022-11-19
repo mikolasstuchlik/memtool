@@ -365,7 +365,7 @@ extension Symbolication {
                 flags: SymbolFlags(rawValue: String(result[flagsRef])),
                 segment: SymbolSection(rawValue: String(result[segmentRef])),
                 size: UInt64(String(result[sizeRef]), radix: 16)!,
-                name: String(result[nameRef])
+                name: String(result[nameRef]).trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }
     }
@@ -385,7 +385,7 @@ extension Symbolication {
             flags: SymbolFlags(rawValue: String(result[flagsRef])),
             segment: SymbolSection(rawValue: String(result[segmentRef])),
             size: UInt64(String(result[sizeRef]), radix: 16)!,
-            name: String(result[nameRef])
+            name: String(result[nameRef]).trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 }

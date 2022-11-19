@@ -7,7 +7,7 @@ protocol CLIPrint {
 
 extension UInt64: CLIPrint {
     var cliPrint: String {
-        String(format: "%016lx", self)
+        String(format: "0x%016lx", self)
     }
 }
 
@@ -29,19 +29,19 @@ extension MemoryRegion: CLIPrint {
 
 extension MapInfo: CLIPrint {
     var cliPrint: String {
-        "MapInfo(flags: \(flags), offset: \(offset.cliPrint), device major: \(device.major), device minor: \(device.minor), inode: \(inode), pathname: \(pathname))"
+        "MapInfo(flags: \(flags.stringValue), offset: \(offset.cliPrint), device major: \(device.major), device minor: \(device.minor), inode: \(inode), pathname: \(pathname.rawValue))"
     }
 }
 
 extension UnloadedSymbolInfo: CLIPrint {
     var cliPrint: String {
-        "UnloadedSymbolInfo(name: \(name), file: \(file), location: \(location.cliPrint), flags: \(flags), segment: \(segment), size: \(size.cliPrint))"
+        "UnloadedSymbolInfo(name: \(name), file: \(file), location: \(location.cliPrint), flags: \(flags.rawValue), segment: \(segment.rawValue), size: \(size.cliPrint))"
     }
 }
 
 extension LoadedSymbolInfo: CLIPrint {
     var cliPrint: String {
-        "LoadedSymbolInfo(name: \(name), flags: \(flags), segment: \(segment))"
+        "LoadedSymbolInfo(name: \(name), flags: \(flags.rawValue), segment: \(segment.rawValue))"
     }
 }
 

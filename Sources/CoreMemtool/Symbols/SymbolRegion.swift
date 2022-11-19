@@ -58,6 +58,16 @@ public struct SymbolFlags: Hashable {
         self.debuggingFlag = SymbolDebuggingFlag(rawValue: String(rawValue.dropFirst(5).prefix(1))) ?? .normal
         self.typeFlag = SymbolTypeFlag(rawValue: String(rawValue.dropFirst(6).prefix(1))) ?? .normal
     }
+
+    public var rawValue: String {
+        scopeFlag.rawValue
+            + weakFlag.rawValue
+            + constructorFlag.rawValue
+            + warningFlag.rawValue
+            + referenceFlag.rawValue
+            + debuggingFlag.rawValue
+            + typeFlag.rawValue
+    }
 }
 
 public struct UnloadedSymbolInfo: Hashable {

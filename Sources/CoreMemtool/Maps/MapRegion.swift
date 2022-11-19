@@ -26,6 +26,15 @@ public struct MapFlags: OptionSet {
             self.insert(.protected)
         }
     }
+
+    public var stringValue: String {
+        var str = ""
+        str += contains(.read) ? "r" : "-"
+        str += contains(.write) ? "w" : "-"
+        str += contains(.execute) ? "e" : "-"
+        str += contains(.protected) ? "p" : "-"
+        return str
+    }
 }
 
 public enum Pseudopath: String {

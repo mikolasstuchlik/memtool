@@ -29,7 +29,8 @@ let operations: [Operation] = [
     helpOperation,
     exitOperation,
     lookupOperation,
-    peekOperation
+    peekOperation,
+    addressOperation
 ]
 
 let helpOperation = Operation(keyword: "help", help: "Shows available commands on stdout.") { input, ctx -> Bool in
@@ -127,31 +128,11 @@ let mapOperation = Operation(keyword: "map", help: "Parse /proc/pid/maps file.")
         return true
     }
 
-    session.map = Map.getMap(for: session.pid)
-    session.executableFileBasePoints = [:]
-    for map in session.map ?? [] {
-        guard case let .file(filename) = map.properties.pathname else {
-            continue
-        }
-
-        let current = session.executableFileBasePoints?[filename]
-        session.executableFileBasePoints?[filename] = current.flatMap { min($0, map.range.lowerBound) } ?? map.range.lowerBound
-    }
-
-    // Remove files that do not have executable page in memory
-    session.executableFileBasePoints = session.executableFileBasePoints?.filter { key, _ -> Bool in
-        for map in session.map ?? [] {
-            if case let .file(filename) = map.properties.pathname, filename == key, map.properties.flags.contains(.execute) {
-                return true
-            }
-        }
-        return false
-    }
+    session.loadMap()
 
     return true
 }
 
-let sectionsToResolve: Set<KnownSymbolSection> = [.bss, .data, .data1, .rodata, .rodata1, .text]
 let symbolOperation = Operation(keyword: "symbol", help: "Requires maps. Loads all symbols for all object files in memory.") { input, ctx -> Bool in
     guard input == "symbol" else {
         return false
@@ -162,34 +143,12 @@ let symbolOperation = Operation(keyword: "symbol", help: "Requires maps. Loads a
         return true
     }
 
-    guard let maps = session.executableFileBasePoints else {
+    guard session.executableFileBasePoints != nil else {
         print("Error: Need to load map first!")
         return true
     }
 
-    let files = Array(maps.keys)
-
-    session.unloadedSymbols = [:]
-    for file in files {
-        let symbols = Symbolication.loadSymbols(for: file)
-        // Remove duplicities
-        let hashedSymbols = Array(Set(symbols))
-        session.unloadedSymbols?[file] = hashedSymbols
-    }
-
-    session.symbols = []
-    session.symbols?.reserveCapacity( session.unloadedSymbols?.values.map(\.count).reduce(0, +) ?? 0)
-    for (file, unloaded) in session.unloadedSymbols ?? [:] {
-        for symbol in unloaded {
-            guard 
-                case let .known(known) = symbol.segment, 
-                sectionsToResolve.contains(known) 
-            else {
-                continue
-            }
-            SymbolRegion(unloadedSymbol: symbol, executableFileBasePoints: maps).flatMap { session.symbols?.append($0) }
-        }
-    }
+    session.loadSymbols()
 
     return true
 }
@@ -213,17 +172,32 @@ let lookupOperation = Operation(keyword: "lookup", help: "[-e] \"[text]\" search
         return true
     }
 
-    if exact {
-        print("Unloaded symbols: ")
-        print(session.unloadedSymbols?.flatMap({ $1 }).filter { $0.name == textToSearch }.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
-        print("Loaded symbols: ")
-        print(session.symbols?.filter { $0.properties.name == textToSearch }.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
-    } else {
-        print("Unloaded symbols: ")
-        print(session.unloadedSymbols?.flatMap({ $1 }).filter { $0.name.contains(textToSearch) }.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
-        print("Loaded symbols: ")
-        print(session.symbols?.filter { $0.properties.name.contains(textToSearch) }.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+    let unloadedPredicate: (UnloadedSymbolInfo) -> Bool = {
+        exact == true
+            ? $0.name == textToSearch
+            : $0.name.contains(textToSearch) 
     }
+
+    let loadedPredicate: (SymbolRegion) -> Bool = {
+        exact == true
+            ? $0.properties.name == textToSearch
+            : $0.properties.name.contains(textToSearch)
+    }
+
+    print("Unloaded symbols: ")
+    let unloaded: String? = session.unloadedSymbols?
+        .flatMap({ $1 })
+        .filter(unloadedPredicate)
+        .map(\.cliPrint)
+        .joined(separator: "\n")
+    print(unloaded ?? "[not loaded]")
+
+    print("Loaded symbols: ")
+    let loaded: String? = session.symbols?
+        .filter(loadedPredicate)
+        .map(\.cliPrint)
+        .joined(separator: "\n")
+    print(loaded ?? "[not loaded]")
 
     return true
 }
@@ -258,6 +232,50 @@ let peekOperation = Operation(keyword: "peek", help: "[typename] [hexa pointer] 
     default:
         return false
     }
+
+    return true
+}
+
+let addressOperation = Operation(keyword: "addr", help: "[hexa pointer] Prints all entities that contain given address with offsets.") { input, ctx -> Bool in
+    guard input.hasPrefix("addr") else {
+        return false
+    }
+    let payload = input.trimmingPrefix("addr").trimmingCharacters(in: .whitespaces)
+
+    guard let base = UInt64(payload.trimmingPrefix("0x"), radix: 16) else {
+        return false
+    }
+
+    guard let session = ctx.session else {
+        print("Error: Not attached to a session!")
+        return true
+    }
+
+    print("Examining address " + base.cliPrint)
+    
+    print("Map:")
+    let map: String? = session.map?
+        .filter {
+            $0.range.contains(base)
+        }
+        .map {
+            let offset = base - $0.range.lowerBound
+            return $0.range.lowerBound.cliPrint + " + " + offset.cliPrint + " \t" + $0.cliPrint
+        }
+        .joined(separator: "\n")
+    print(map ?? "[not loaded]")
+
+    print("Loaded symbols: ")
+    let loaded: String? = session.symbols?
+        .filter {
+            $0.range.contains(base)
+        }
+        .map {
+            let offset = base - $0.range.lowerBound
+            return $0.range.lowerBound.cliPrint + " + " + offset.cliPrint + " \t" + $0.cliPrint
+        }
+        .joined(separator: "\n")
+    print(loaded ?? "[not loaded]")
 
     return true
 }
