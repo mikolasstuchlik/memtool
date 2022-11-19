@@ -173,11 +173,11 @@ extension Map {
             return MapRegion(
                 range: UInt64(String(result[startRef]), radix: 16)!..<UInt64(String(result[endRef]), radix: 16)!, 
                 properties: MapInfo(
-                    flags: String(result[flagsRef]),
+                    flags: MapFlags(rawValue: String(result[flagsRef])),
                     offset: UInt64(String(result[offsetRef]), radix: 16)!,
                     device: (major: UInt64(String(result[deviceMajorRef]), radix: 10)!, minor: UInt64(String(result[deviceMinorRef]), radix: 10)!),
                     inode: UInt64(String(result[inodeRef]), radix: 10)!,
-                    pathname: String(result[pathnameRef]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    pathname: MapPath(rawValue: String(result[pathnameRef]).trimmingCharacters(in: .whitespacesAndNewlines))
                 )
             )
         }

@@ -105,7 +105,7 @@ let statusOperation = Operation(keyword: "status", help: "[-m|-u|-l] Prints curr
         print(session.cliPrint)
     case "-m":
         print(session.map?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
-    case "-u": break
+    case "-u":
         print(session.unloadedSymbols?.flatMap({ $1 }).map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
     case "-l":
         print(session.symbols?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
@@ -128,19 +128,30 @@ let mapOperation = Operation(keyword: "map", help: "Parse /proc/pid/maps file.")
     }
 
     session.map = Map.getMap(for: session.pid)
-    session.fileBasePoints = [:]
+    session.executableFileBasePoints = [:]
     for map in session.map ?? [] {
-        if map.properties.pathname.hasPrefix("[") || map.properties.pathname.hasSuffix("[") || map.properties.pathname.isEmpty {
+        guard case let .file(filename) = map.properties.pathname else {
             continue
         }
 
-        let current = session.fileBasePoints?[map.properties.pathname]
-        session.fileBasePoints?[map.properties.pathname] = current.flatMap { min($0, map.range.lowerBound) } ?? map.range.lowerBound
+        let current = session.executableFileBasePoints?[filename]
+        session.executableFileBasePoints?[filename] = current.flatMap { min($0, map.range.lowerBound) } ?? map.range.lowerBound
+    }
+
+    // Remove files that do not have executable page in memory
+    session.executableFileBasePoints = session.executableFileBasePoints?.filter { key, _ -> Bool in
+        for map in session.map ?? [] {
+            if case let .file(filename) = map.properties.pathname, filename == key, map.properties.flags.contains(.execute) {
+                return true
+            }
+        }
+        return false
     }
 
     return true
 }
 
+let sectionsToResolve: Set<KnownSymbolSection> = [.bss, .data, .data1, .rodata, .rodata1, .text]
 let symbolOperation = Operation(keyword: "symbol", help: "Requires maps. Loads all symbols for all object files in memory.") { input, ctx -> Bool in
     guard input == "symbol" else {
         return false
@@ -151,7 +162,7 @@ let symbolOperation = Operation(keyword: "symbol", help: "Requires maps. Loads a
         return true
     }
 
-    guard let maps = session.fileBasePoints else {
+    guard let maps = session.executableFileBasePoints else {
         print("Error: Need to load map first!")
         return true
     }
@@ -160,14 +171,23 @@ let symbolOperation = Operation(keyword: "symbol", help: "Requires maps. Loads a
 
     session.unloadedSymbols = [:]
     for file in files {
-        session.unloadedSymbols?[file] = Symbolication.loadSymbols(for: file)
+        let symbols = Symbolication.loadSymbols(for: file)
+        // Remove duplicities
+        let hashedSymbols = Array(Set(symbols))
+        session.unloadedSymbols?[file] = hashedSymbols
     }
 
     session.symbols = []
     session.symbols?.reserveCapacity( session.unloadedSymbols?.values.map(\.count).reduce(0, +) ?? 0)
     for (file, unloaded) in session.unloadedSymbols ?? [:] {
         for symbol in unloaded {
-            SymbolRegion(unloadedSymbol: symbol, fileBasePoints: maps).flatMap { session.symbols?.append($0) }
+            guard 
+                case let .known(known) = symbol.segment, 
+                sectionsToResolve.contains(known) 
+            else {
+                continue
+            }
+            SymbolRegion(unloadedSymbol: symbol, executableFileBasePoints: maps).flatMap { session.symbols?.append($0) }
         }
     }
 

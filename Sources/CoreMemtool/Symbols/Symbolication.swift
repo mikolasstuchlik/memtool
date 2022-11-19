@@ -52,6 +52,201 @@ import _StringProcessing
            "O" The symbol is the name of a function (F) or a file (f) or an object (O) or just a normal symbol (a space).
 */
 
+/*
+{man elf}
+       Various sections hold program and control information:
+
+       .bss   This section holds uninitialized data that contributes to
+              the program's memory image.  By definition, the system
+              initializes the data with zeros when the program begins to
+              run.  This section is of type SHT_NOBITS.  The attribute
+              types are SHF_ALLOC and SHF_WRITE.
+
+       .comment
+              This section holds version control information.  This
+              section is of type SHT_PROGBITS.  No attribute types are
+              used.
+
+       .ctors This section holds initialized pointers to the C++
+              constructor functions.  This section is of type
+              SHT_PROGBITS.  The attribute types are SHF_ALLOC and
+              SHF_WRITE.
+
+       .data  This section holds initialized data that contribute to the
+              program's memory image.  This section is of type
+              SHT_PROGBITS.  The attribute types are SHF_ALLOC and
+              SHF_WRITE.
+
+       .data1 This section holds initialized data that contribute to the
+              program's memory image.  This section is of type
+              SHT_PROGBITS.  The attribute types are SHF_ALLOC and
+              SHF_WRITE.
+
+       .debug This section holds information for symbolic debugging.
+              The contents are unspecified.  This section is of type
+              SHT_PROGBITS.  No attribute types are used.
+
+       .dtors This section holds initialized pointers to the C++
+              destructor functions.  This section is of type
+              SHT_PROGBITS.  The attribute types are SHF_ALLOC and
+              SHF_WRITE.
+
+       .dynamic
+              This section holds dynamic linking information.  The
+              section's attributes will include the SHF_ALLOC bit.
+              Whether the SHF_WRITE bit is set is processor-specific.
+              This section is of type SHT_DYNAMIC.  See the attributes
+              above.
+
+       .dynstr
+              This section holds strings needed for dynamic linking,
+              most commonly the strings that represent the names
+              associated with symbol table entries.  This section is of
+              type SHT_STRTAB.  The attribute type used is SHF_ALLOC.
+
+       .dynsym
+              This section holds the dynamic linking symbol table.  This
+              section is of type SHT_DYNSYM.  The attribute used is
+              SHF_ALLOC.
+
+       .fini  This section holds executable instructions that contribute
+              to the process termination code.  When a program exits
+              normally the system arranges to execute the code in this
+              section.  This section is of type SHT_PROGBITS.  The
+              attributes used are SHF_ALLOC and SHF_EXECINSTR.
+
+       .gnu.version
+              This section holds the version symbol table, an array of
+              ElfN_Half elements.  This section is of type
+              SHT_GNU_versym.  The attribute type used is SHF_ALLOC.
+
+       .gnu.version_d
+              This section holds the version symbol definitions, a table
+              of ElfN_Verdef structures.  This section is of type
+              SHT_GNU_verdef.  The attribute type used is SHF_ALLOC.
+
+       .gnu.version_r
+              This section holds the version symbol needed elements, a
+              table of ElfN_Verneed structures.  This section is of type
+              SHT_GNU_versym.  The attribute type used is SHF_ALLOC.
+
+       .got   This section holds the global offset table.  This section
+              is of type SHT_PROGBITS.  The attributes are processor-
+              specific.
+
+       .hash  This section holds a symbol hash table.  This section is
+              of type SHT_HASH.  The attribute used is SHF_ALLOC.
+
+       .init  This section holds executable instructions that contribute
+              to the process initialization code.  When a program starts
+              to run the system arranges to execute the code in this
+              section before calling the main program entry point.  This
+              section is of type SHT_PROGBITS.  The attributes used are
+              SHF_ALLOC and SHF_EXECINSTR.
+
+       .interp
+              This section holds the pathname of a program interpreter.
+              If the file has a loadable segment that includes the
+              section, the section's attributes will include the
+              SHF_ALLOC bit.  Otherwise, that bit will be off.  This
+              section is of type SHT_PROGBITS.
+
+       .line  This section holds line number information for symbolic
+              debugging, which describes the correspondence between the
+              program source and the machine code.  The contents are
+              unspecified.  This section is of type SHT_PROGBITS.  No
+              attribute types are used.
+
+       .note  This section holds various notes.  This section is of type
+              SHT_NOTE.  No attribute types are used.
+
+       .note.ABI-tag
+              This section is used to declare the expected run-time ABI
+              of the ELF image.  It may include the operating system
+              name and its run-time versions.  This section is of type
+              SHT_NOTE.  The only attribute used is SHF_ALLOC.
+
+       .note.gnu.build-id
+              This section is used to hold an ID that uniquely
+              identifies the contents of the ELF image.  Different files
+              with the same build ID should contain the same executable
+              content.  See the --build-id option to the GNU linker (ld
+              (1)) for more details.  This section is of type SHT_NOTE.
+              The only attribute used is SHF_ALLOC.
+
+       .note.GNU-stack
+              This section is used in Linux object files for declaring
+              stack attributes.  This section is of type SHT_PROGBITS.
+              The only attribute used is SHF_EXECINSTR.  This indicates
+              to the GNU linker that the object file requires an
+              executable stack.
+
+       .note.openbsd.ident
+              OpenBSD native executables usually contain this section to
+              identify themselves so the kernel can bypass any
+              compatibility ELF binary emulation tests when loading the
+              file.
+
+       .plt   This section holds the procedure linkage table.  This
+              section is of type SHT_PROGBITS.  The attributes are
+              processor-specific.
+
+       .relNAME
+              This section holds relocation information as described
+              below.  If the file has a loadable segment that includes
+              relocation, the section's attributes will include the
+              SHF_ALLOC bit.  Otherwise, the bit will be off.  By
+              convention, "NAME" is supplied by the section to which the
+              relocations apply.  Thus a relocation section for .text
+              normally would have the name .rel.text.  This section is
+              of type SHT_REL.
+
+       .relaNAME
+              This section holds relocation information as described
+              below.  If the file has a loadable segment that includes
+              relocation, the section's attributes will include the
+              SHF_ALLOC bit.  Otherwise, the bit will be off.  By
+              convention, "NAME" is supplied by the section to which the
+              relocations apply.  Thus a relocation section for .text
+              normally would have the name .rela.text.  This section is
+              of type SHT_RELA.
+
+       .rodata
+              This section holds read-only data that typically
+              contributes to a nonwritable segment in the process image.
+              This section is of type SHT_PROGBITS.  The attribute used
+              is SHF_ALLOC.
+
+       .rodata1
+              This section holds read-only data that typically
+              contributes to a nonwritable segment in the process image.
+              This section is of type SHT_PROGBITS.  The attribute used
+              is SHF_ALLOC.
+
+       .shstrtab
+              This section holds section names.  This section is of type
+              SHT_STRTAB.  No attribute types are used.
+
+       .strtab
+              This section holds strings, most commonly the strings that
+              represent the names associated with symbol table entries.
+              If the file has a loadable segment that includes the
+              symbol string table, the section's attributes will include
+              the SHF_ALLOC bit.  Otherwise, the bit will be off.  This
+              section is of type SHT_STRTAB.
+
+       .symtab
+              This section holds a symbol table.  If the file has a
+              loadable segment that includes the symbol table, the
+              section's attributes will include the SHF_ALLOC bit.
+              Otherwise, the bit will be off.  This section is of type
+              SHT_SYMTAB.
+
+       .text  This section holds the "text", or executable instructions,
+              of a program.  This section is of type SHT_PROGBITS.  The
+              attributes used are SHF_ALLOC and SHF_EXECINSTR.
+*/
+
 extension Symbolication {
 
     private static let locationRef = Reference(Substring.self)
@@ -167,8 +362,8 @@ extension Symbolication {
             return UnloadedSymbolInfo(
                 file: file,
                 location: UInt64(String(result[locationRef]), radix: 16)!,
-                flags: String(result[flagsRef]),
-                segment: String(result[segmentRef]),
+                flags: SymbolFlags(rawValue: String(result[flagsRef])),
+                segment: SymbolSection(rawValue: String(result[segmentRef])),
                 size: UInt64(String(result[sizeRef]), radix: 16)!,
                 name: String(result[nameRef])
             )
@@ -187,8 +382,8 @@ extension Symbolication {
         return UnloadedSymbolInfo(
             file: file,
             location: UInt64(String(result[locationRef]), radix: 16)!,
-            flags: String(result[flagsRef]),
-            segment: String(result[segmentRef]),
+            flags: SymbolFlags(rawValue: String(result[flagsRef])),
+            segment: SymbolSection(rawValue: String(result[segmentRef])),
             size: UInt64(String(result[sizeRef]), radix: 16)!,
             name: String(result[nameRef])
         )
