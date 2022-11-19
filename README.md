@@ -30,7 +30,7 @@ Ordered TODO list:
 At this time, only Glibc x86-64 platform is targeted. There are no plans to implement support for any other platform.
 
 ## Usage
-Run using `swift run`.
+Run using `swift run`. Note, that in order to attach to a running process you need to have a priviledge. Simplest way is to use `sudo`.
 
 Interactive mode usage:
 ```
@@ -49,3 +49,6 @@ Available operations:
 
 ## Note
 I welcome any contribution at any stage of development.
+
+I am aware, that there are tools and plugins for lldb and gdb (and other programs) that already acomplish similar results. I have tried many of them and none fits the purpose. I want this tool to be simple enought to be expanded by Swift developers. Having the requirement to understand (for example) lldb scripting, the scripting language itself and the issue itself seems to me like a big task. 
+This tool is intended for Swift developers, it provides almost no value to other languages.
