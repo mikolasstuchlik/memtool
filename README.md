@@ -25,6 +25,7 @@ Ordered TODO list:
  - Introduce system for heuristics for analyzing ARC retain cycles.
  - Expand interactive mode so it prints `.dot` graphs of memory
  - Create Plug-In system and create Plugin for `Glib/GObject` ARC
+ - Replace `Swift.Process` calls with other possibilites (using `elf.h`, `dwarf.h`)
 
 ## Limitations
 At this time, only Glibc x86-64 platform is targeted. There are no plans to implement support for any other platform.
