@@ -21,11 +21,11 @@ extension malloc_chunk {
     }
 }
 
-struct Chunk {
-    let header: malloc_chunk
-    let content: RawRemoteMemory
+public struct Chunk {
+    public let header: malloc_chunk
+    public let content: RawRemoteMemory
 
-    init(pid: Int32, baseAddress: UInt64) {
+    public init(pid: Int32, baseAddress: UInt64) {
         self.header = BoundRemoteMemory<malloc_chunk>(pid: pid, load: baseAddress).buffer
         self.content = RawRemoteMemory(pid: pid, load: baseAddress..<(baseAddress + header.size))
     }

@@ -61,3 +61,18 @@ Symbols:
 """
     }
 }
+
+extension Chunk: CLIPrint {
+    var cliPrint: String {
+"""
+=== Chunk [\(content.segment.lowerBound.cliPrint)]
+Header:
+\(header)
+Payload:
+\({
+    content.buffer.map { String(format: "0x%02x", $0) }.joined(separator: " ")
+}())
+===
+"""
+    }
+}

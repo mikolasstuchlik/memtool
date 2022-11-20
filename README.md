@@ -16,7 +16,7 @@ https://www.forensicfocus.com/articles/linux-memory-forensics-dissecting-the-use
 Without introduction of malloc hooks, it can not be guaranteed, that all malloc blocks can be reached at all times. Especially mmapped blocks are the issue here.
 
 Ordered TODO list:
- - Assuming `main_arena` is known, traverse all reachable malloc chunks in all arenas.
+ - Assuming `main_arena` is known, traverse all reachable malloc chunks in all arenas. [DONE]
  - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper).
  - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present.
  - Incorporate libCoreMemtool into `swift-inspect`
@@ -36,16 +36,18 @@ Run using `swift run`. Note, that in order to attach to a running process you ne
 Interactive mode usage:
 ```
 Available operations:
-  attach - [PID] attempts to attach to a process.
-  detach - Detached from attached process.
-  status - [-m|-u|-l] Prints current session to stdout. Use -m for map, -u for unloaded symbols and -l for loaded symbols.
-  map    - Parse /proc/pid/maps file.
-  symbol - Requires maps. Loads all symbols for all object files in memory.
-  help   - Shows available commands on stdout.
-  exit   - Stops the execution
-  lookup - [-e] "[text]" searches symbols matching text. Use -e if you want only exact matches.
-  peek   - [typename] [hexa pointer] Peeks ans bind a memory to any of following types: ["malloc_state", "malloc_chunk", "_heap_info"]
-  addr   - [hexa pointer] Prints all entities that contain given address with offsets.
+  attach  - [PID] attempts to attach to a process.
+  detach  - Detached from attached process.
+  status  - [-m|-u|-l|-a] Prints current session to stdout. Use -m for map, -u for unloaded symbols and -l for loaded symbols, -a for glibc malloc analysis result.
+  map     - Parse /proc/pid/maps file.
+  symbol  - Requires maps. Loads all symbols for all object files in memory.
+  help    - Shows available commands on stdout.
+  exit    - Stops the execution
+  lookup  - [-e] "[text]" searches symbols matching text. Use -e if you want only exact matches.
+  peek    - [typename] [hexa pointer] Peeks ans bind a memory to any of following types: ["malloc_state", "malloc_chunk", "_heap_info"]
+  addr    - [hexa pointer] Prints all entities that contain given address with offsets.
+  analyze - Attempts to enumerate heap chubnks
+  chunk   - [hexa pointer] Attempts to load address as chunk and dumps it
 ```
 
 ## Note

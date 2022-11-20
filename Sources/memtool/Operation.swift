@@ -3,6 +3,7 @@ import CoreMemtool
 struct Context {
     let operations: [Operation]
     var session: Session?
+    var glibcMallocExplorer: GlibcMallocAnalyzer?
     var shouldStop: Bool
 
     mutating func resolve(input: String) {

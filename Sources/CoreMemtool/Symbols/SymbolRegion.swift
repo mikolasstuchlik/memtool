@@ -132,6 +132,7 @@ public enum KnownSymbolSection: String {
     case symtab = ".symtab"
     /// Executable instructions
     case text = ".text"
+    case abs = "*ABS*"
 }
 
 public enum SymbolSection: RawRepresentable, Equatable, Hashable {

@@ -30,7 +30,9 @@ let operations: [Operation] = [
     exitOperation,
     lookupOperation,
     peekOperation,
-    addressOperation
+    addressOperation,
+    analyzeOperation,
+    chunkOperation
 ]
 
 let helpOperation = Operation(keyword: "help", help: "Shows available commands on stdout.") { input, ctx -> Bool in
@@ -68,7 +70,7 @@ let attachOperation = Operation(keyword: "attach", help: "[PID] attempts to atta
     }
 
     if ctx.session != nil {
-        print("Error: Already attached to a process.")
+        CoreMemtool.error("Error: Already attached to a process.")
         return true
     }
 
@@ -87,12 +89,12 @@ let detachOperation = Operation(keyword: "detach", help: "Detached from attached
     return true
 }
 
-let statusOperation = Operation(keyword: "status", help: "[-m|-u|-l] Prints current session to stdout. Use -m for map, -u for unloaded symbols and -l for loaded symbols.") { input, ctx -> Bool in
+let statusOperation = Operation(keyword: "status", help: "[-m|-u|-l|-a] Prints current session to stdout. Use -m for map, -u for unloaded symbols and -l for loaded symbols, -a for glibc malloc analysis result.") { input, ctx -> Bool in
     guard input.hasPrefix("status") else {
         return false
     }
     let suffix = input.trimmingPrefix("status").trimmingCharacters(in: .whitespaces)
-    guard suffix.isEmpty || suffix == "-m" || suffix == "-u" || suffix == "-l" else {
+    guard suffix.isEmpty || suffix == "-m" || suffix == "-u" || suffix == "-l" || suffix == "-a" else {
         return false
     }
 
@@ -110,6 +112,8 @@ let statusOperation = Operation(keyword: "status", help: "[-m|-u|-l] Prints curr
         print(session.unloadedSymbols?.flatMap({ $1 }).map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
     case "-l":
         print(session.symbols?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+    case "-a":
+        print(ctx.glibcMallocExplorer?.exploredHeap.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
     default:
         return false
     }
@@ -124,7 +128,7 @@ let mapOperation = Operation(keyword: "map", help: "Parse /proc/pid/maps file.")
     }
 
     guard let session = ctx.session else {
-        print("Error: Not attached to a session!")
+        CoreMemtool.error("Error: Not attached to a session!")
         return true
     }
 
@@ -139,12 +143,12 @@ let symbolOperation = Operation(keyword: "symbol", help: "Requires maps. Loads a
     }
 
     guard let session = ctx.session else {
-        print("Error: Not attached to a session!")
+        CoreMemtool.error("Error: Not attached to a session!")
         return true
     }
 
     guard session.executableFileBasePoints != nil else {
-        print("Error: Need to load map first!")
+        CoreMemtool.error("Error: Need to load map first!")
         return true
     }
 
@@ -168,7 +172,7 @@ let lookupOperation = Operation(keyword: "lookup", help: "[-e] \"[text]\" search
     }
 
     guard let session = ctx.session else {
-        print("Error: Not attached to a session!")
+        CoreMemtool.error("Error: Not attached to a session!")
         return true
     }
 
@@ -215,7 +219,7 @@ let peekOperation = Operation(keyword: "peek", help: "[typename] [hexa pointer] 
     }
 
     guard let session = ctx.session else {
-        print("Error: Not attached to a session!")
+        CoreMemtool.error("Error: Not attached to a session!")
         return true
     }
 
@@ -247,7 +251,7 @@ let addressOperation = Operation(keyword: "addr", help: "[hexa pointer] Prints a
     }
 
     guard let session = ctx.session else {
-        print("Error: Not attached to a session!")
+        CoreMemtool.error("Error: Not attached to a session!")
         return true
     }
 
@@ -276,6 +280,60 @@ let addressOperation = Operation(keyword: "addr", help: "[hexa pointer] Prints a
         }
         .joined(separator: "\n")
     print(loaded ?? "[not loaded]")
+
+    print("Glibc malloc analysis: ")
+    let analyzed = ctx.glibcMallocExplorer?.exploredHeap
+        .filter {
+            $0.range.contains(base)
+        }
+        .map {
+            let offset = base - $0.range.lowerBound
+            return $0.range.lowerBound.cliPrint + " + " + offset.cliPrint + " \t" + $0.cliPrint
+        }
+        .joined(separator: "\n")
+    print(analyzed ?? "[not loaded]")
+
+
+    return true
+}
+
+let analyzeOperation = Operation(keyword: "analyze", help: "Attempts to enumerate heap chubnks") { input, ctx -> Bool in
+    guard input == "analyze" else {
+        return false
+    }
+    
+    guard let session = ctx.session else {
+        CoreMemtool.error("Error: Not attached to a session!")
+        return true
+    }
+
+    do {
+        ctx.glibcMallocExplorer = try GlibcMallocAnalyzer(session: session)
+        ctx.glibcMallocExplorer?.analyze()
+    } catch {
+        CoreMemtool.error("Error: Glibc exlorer ended with error: \(error)")
+    }
+
+    return true
+}
+
+let chunkOperation = Operation(keyword: "chunk", help: "[hexa pointer] Attempts to load address as chunk and dumps it") { input, ctx -> Bool in
+    guard input.hasPrefix("chunk") else {
+        return false
+    }
+    let payload = input.trimmingPrefix("chunk").trimmingCharacters(in: .whitespaces)
+
+    guard let base = UInt64(payload.trimmingPrefix("0x"), radix: 16) else {
+        return false
+    }
+
+    guard let session = ctx.session else {
+        CoreMemtool.error("Error: Not attached to a session!")
+        return true
+    }
+
+    let chunk = Chunk(pid: session.pid, baseAddress: base)
+    print(chunk.cliPrint)
 
     return true
 }
