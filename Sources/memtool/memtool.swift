@@ -1,5 +1,5 @@
 import Foundation
-import CoreMemtool
+import MemtoolCore
 import Cutils
 
 @main
@@ -70,7 +70,7 @@ let attachOperation = Operation(keyword: "attach", help: "[PID] attempts to atta
     }
 
     if ctx.session != nil {
-        CoreMemtool.error("Error: Already attached to a process.")
+        MemtoolCore.error("Error: Already attached to a process.")
         return true
     }
 
@@ -128,7 +128,7 @@ let mapOperation = Operation(keyword: "map", help: "Parse /proc/pid/maps file.")
     }
 
     guard let session = ctx.session else {
-        CoreMemtool.error("Error: Not attached to a session!")
+        MemtoolCore.error("Error: Not attached to a session!")
         return true
     }
 
@@ -143,12 +143,12 @@ let symbolOperation = Operation(keyword: "symbol", help: "Requires maps. Loads a
     }
 
     guard let session = ctx.session else {
-        CoreMemtool.error("Error: Not attached to a session!")
+        MemtoolCore.error("Error: Not attached to a session!")
         return true
     }
 
     guard session.executableFileBasePoints != nil else {
-        CoreMemtool.error("Error: Need to load map first!")
+        MemtoolCore.error("Error: Need to load map first!")
         return true
     }
 
@@ -172,7 +172,7 @@ let lookupOperation = Operation(keyword: "lookup", help: "[-e] \"[text]\" search
     }
 
     guard let session = ctx.session else {
-        CoreMemtool.error("Error: Not attached to a session!")
+        MemtoolCore.error("Error: Not attached to a session!")
         return true
     }
 
@@ -219,7 +219,7 @@ let peekOperation = Operation(keyword: "peek", help: "[typename] [hexa pointer] 
     }
 
     guard let session = ctx.session else {
-        CoreMemtool.error("Error: Not attached to a session!")
+        MemtoolCore.error("Error: Not attached to a session!")
         return true
     }
 
@@ -251,7 +251,7 @@ let addressOperation = Operation(keyword: "addr", help: "[hexa pointer] Prints a
     }
 
     guard let session = ctx.session else {
-        CoreMemtool.error("Error: Not attached to a session!")
+        MemtoolCore.error("Error: Not attached to a session!")
         return true
     }
 
@@ -303,7 +303,7 @@ let analyzeOperation = Operation(keyword: "analyze", help: "Attempts to enumerat
     }
     
     guard let session = ctx.session else {
-        CoreMemtool.error("Error: Not attached to a session!")
+        MemtoolCore.error("Error: Not attached to a session!")
         return true
     }
 
@@ -311,7 +311,7 @@ let analyzeOperation = Operation(keyword: "analyze", help: "Attempts to enumerat
         ctx.glibcMallocExplorer = try GlibcMallocAnalyzer(session: session)
         ctx.glibcMallocExplorer?.analyze()
     } catch {
-        CoreMemtool.error("Error: Glibc exlorer ended with error: \(error)")
+        MemtoolCore.error("Error: Glibc exlorer ended with error: \(error)")
     }
 
     return true
@@ -328,7 +328,7 @@ let chunkOperation = Operation(keyword: "chunk", help: "[hexa pointer] Attempts 
     }
 
     guard let session = ctx.session else {
-        CoreMemtool.error("Error: Not attached to a session!")
+        MemtoolCore.error("Error: Not attached to a session!")
         return true
     }
 

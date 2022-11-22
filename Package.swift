@@ -6,13 +6,16 @@ import PackageDescription
 let package = Package(
     name: "memtool",
     products: [
-        .library(name: "CoreMemtool", targets: ["CoreMemtool"]),
+        .library(name: "MemtoolCore", targets: ["MemtoolCore"]),
         .executable(name: "memtool", targets: ["memtool"])
     ],
     targets: [
         .target(name: "Cutils"),
-        .target(name: "CoreMemtool", dependencies: ["Cutils"]),
-        .executableTarget(name: "memtool", dependencies: ["CoreMemtool"]),
+        .target(name: "MemtoolCore", dependencies: ["Cutils"]),
+        .executableTarget(name: "memtool", dependencies: ["MemtoolCore"]),
+
+
+        .testTarget(name: "MemtoolCoreTests", dependencies: ["MemtoolCore"])
     ]
 )
 

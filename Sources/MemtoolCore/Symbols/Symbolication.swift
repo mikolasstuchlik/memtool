@@ -338,7 +338,7 @@ extension Symbolication {
         try! process.run()
 
         while process.isRunning {
-            buffer.append(aStdout.fileHandleForReading.readDataToEndOfFile())
+            buffer.append(aStdout.fileHandleForReading.availableData)
         }
 
         guard process.terminationStatus == 0 else {

@@ -1,4 +1,4 @@
-import CoreMemtool
+import MemtoolCore
 import Foundation
 
 protocol CLIPrint {

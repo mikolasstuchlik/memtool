@@ -1,4 +1,4 @@
-import CoreMemtool
+import MemtoolCore
 
 struct Context {
     let operations: [Operation]

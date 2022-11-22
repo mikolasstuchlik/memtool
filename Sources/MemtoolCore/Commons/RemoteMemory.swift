@@ -1,3 +1,5 @@
+import Foundation
+
 public struct RawRemoteMemory {
     public let segment: MemoryRange
     public let buffer: ContiguousArray<UInt8>
@@ -7,6 +9,14 @@ public struct RawRemoteMemory {
         var buffer = ContiguousArray<UInt8>.init(repeating: 0, count: segment.count)
         swift_inspect_bridge__ptrace_peekdata_initialize(pid, segment.startIndex, &buffer)
         self.buffer = buffer
+    }
+}
+
+extension RawRemoteMemory {
+    public var asAsciiString: String {
+        buffer.reduce(into: "") { result, current in
+            result += Unicode.Scalar(current).escaped(asASCII: true)
+        }
     }
 }
 

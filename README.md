@@ -1,6 +1,6 @@
 # memtool
 
-Memtool (or rather libCoreMemtool) should provide babis for successful implementation of `swift-inspect` on Linux and beyond: the equivalent of "Memory Graph" on Linux. 
+Memtool (or rather libMemtoolCore) should provide babis for successful implementation of `swift-inspect` on Linux and beyond: the equivalent of "Memory Graph" on Linux. 
 
 ## Aims
 The `swift-inspect` requires followin capabilities:
@@ -19,7 +19,7 @@ Ordered TODO list:
  - Assuming `main_arena` is known, traverse all reachable malloc chunks in all arenas. [DONE]
  - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper).
  - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present.
- - Incorporate libCoreMemtool into `swift-inspect`
+ - Incorporate libMemtoolCore into `swift-inspect`
  - Release version 1.0 of `memtool` and open PR on `apple/swift`
  - Using metadata from `swift-inspect`, create initial "Memory Graph" algorithm on Linux
  - Introduce system for heuristics for analyzing ARC retain cycles.

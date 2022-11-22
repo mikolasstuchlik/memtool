@@ -42,6 +42,7 @@ public enum Pseudopath: String {
     case vdso = "[vdso]"
     case heap = "[heap]"
     case vsyscall = "[vsyscall]"
+    case vvar = "[vvar]"
     case mmapped = ""
 }
 
