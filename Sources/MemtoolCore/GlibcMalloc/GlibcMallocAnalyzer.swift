@@ -60,7 +60,7 @@ public final class GlibcMallocAnalyzer {
             let threadArena = BoundRemoteMemory<malloc_state>(pid: pid, load: currentBase)
             exploredHeap.append(GlibcMallocRegion(
                 range: threadArena.segment, 
-                properties: GlibcMallocInfo(rebound: .mallocState, state: .explored(false))
+                properties: GlibcMallocInfo(rebound: .mallocState, explored: false)
             ))
             currentBase = UInt64(UInt(bitPattern: threadArena.buffer.next))
         }
@@ -70,7 +70,7 @@ public final class GlibcMallocAnalyzer {
         let exploredCopy = exploredHeap
         for (index, region) in exploredCopy.enumerated() {
             guard 
-                case .explored(false) = region.properties.state,
+                !region.properties.explored,
                 case .mallocState = region.properties.rebound
             else {
                 continue
@@ -82,11 +82,11 @@ public final class GlibcMallocAnalyzer {
             for heapInfo in heapInfoBlocks {
                 exploredHeap.append(GlibcMallocRegion(
                     range: heapInfo.segment, 
-                    properties: GlibcMallocInfo(rebound: .heapInfo, state: .explored(false))
+                    properties: GlibcMallocInfo(rebound: .heapInfo, explored: false)
                 ))
             }
 
-            exploredHeap[index].properties.state = .explored(true)
+            exploredHeap[index].properties.explored = true
         }
     }
 
@@ -144,7 +144,7 @@ public final class GlibcMallocAnalyzer {
         let exploredCopy = exploredHeap
         for (index, region) in exploredCopy.enumerated() {
             guard 
-                case .explored(false) = region.properties.state,
+                !region.properties.explored,
                 case .heapInfo = region.properties.rebound
             else {
                 continue
@@ -179,7 +179,7 @@ public final class GlibcMallocAnalyzer {
             let chunks = traverseChunks(in: assumedRange, assumeHasTopChunk: containsTopChunk)
             exploredHeap.append(contentsOf: chunks)
 
-            exploredHeap[index].properties.state = .explored(true)
+            exploredHeap[index].properties.explored = true
         }
     }
 
@@ -199,7 +199,7 @@ public final class GlibcMallocAnalyzer {
             }
             chunks.append(GlibcMallocRegion(
                 range: chunkRange, 
-                properties: .init(rebound: .mallocChunk(.heapActive), state: .explored(true))
+                properties: .init(rebound: .mallocChunk(.heapActive), explored: true)
             ))
             currentTop = chunkRange.upperBound
         }

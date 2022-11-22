@@ -11,24 +11,19 @@ public struct GlibcMallocMapAnalysis {
     public var mapRegion: MapRegion
 }
 
-public enum GlibcMallocChunkState {
+public enum GlibcMallocChunkState: Equatable {
     case mmapped, heapActive, heapFreed, topChunk
 }
 
-public enum GlibcMallocAssumedRebound {
+public enum GlibcMallocAssumedRebound: Equatable {
     case mallocState
     case mallocChunk(GlibcMallocChunkState)
     case heapInfo
 }
 
-// TODO: Is this enum needed?
-public enum GlibcMallocHeapAnalysisState {
-    case explored(Bool)
-}
-
-public struct GlibcMallocInfo {
+public struct GlibcMallocInfo: Equatable {
     public var rebound: GlibcMallocAssumedRebound
-    public var state: GlibcMallocHeapAnalysisState
+    public var explored: Bool
 }
 
 public typealias GlibcMallocRegion = MemoryRegion<GlibcMallocInfo>
