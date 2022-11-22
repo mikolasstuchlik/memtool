@@ -1,3 +1,6 @@
+#ifndef HEAP_UTILS_H
+#define HEAP_UTILS_H
+
 #include <stddef.h>
 // Everything copied from glibc/malloc/malloc.c if not specified otherwise
 #define INTERNAL_SIZE_T size_t
@@ -59,6 +62,9 @@ typedef struct malloc_chunk *mfastbinptr;
 #define MAX_FAST_SIZE     (80 * SIZE_SZ / 4)
 #define NFASTBINS  (fastbin_index (request2size (MAX_FAST_SIZE)) + 1)
 
+// Macro added for Swift compatibility
+#define NBINS_TOTAL (NBINS * 2 - 2)
+
 struct malloc_state
 {
   /* Serialize access.  */
@@ -75,7 +81,7 @@ struct malloc_state
   /* The remainder from the most recent split of a small request */
   mchunkptr last_remainder;
   /* Normal bins packed as described above */
-  mchunkptr bins[NBINS * 2 - 2];
+  mchunkptr bins[NBINS_TOTAL];
   /* Bitmap of bins */
   unsigned int binmap[BINMAPSIZE];
   /* Linked list */
@@ -91,10 +97,6 @@ struct malloc_state
   INTERNAL_SIZE_T system_mem;
   INTERNAL_SIZE_T max_system_mem;
 };
-
-size_t min_chunk_size() {
-  return MIN_CHUNK_SIZE;
-}
 
 typedef struct malloc_state *mstate;
 
@@ -117,3 +119,5 @@ typedef struct _heap_info
   char pad[-3 * SIZE_SZ & MALLOC_ALIGN_MASK];
 } heap_info;
 //======= 
+
+#endif /* HEAP_UTILS_H */

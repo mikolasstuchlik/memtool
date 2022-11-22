@@ -13,6 +13,8 @@ public final class GlibcMallocAnalyzer {
     public let mainArena: BoundRemoteMemory<malloc_state>
 
     public private(set) var map: [GlibcMallocMapAnalysis]
+    public private(set) var fastbinFreedChunks: Set<UInt64>
+    public private(set) var binFreedChunks: Set<UInt64>
     public private(set) var exploredHeap: [GlibcMallocRegion]
 
     public init(session: Session) throws {
@@ -40,6 +42,8 @@ public final class GlibcMallocAnalyzer {
         self.mainArena = BoundRemoteMemory<malloc_state>(pid: pid, load: mainArena.range.lowerBound)
         self.map = map.map { GlibcMallocMapAnalysis(flag: .notYetAnalyzed, mapRegion: $0) }
         self.exploredHeap = []
+        self.fastbinFreedChunks = []
+        self.binFreedChunks = []
     }
 
     public func analyze() {
@@ -50,6 +54,7 @@ public final class GlibcMallocAnalyzer {
 
         localizeThreadArenas()
         analyzeThreadArenas()
+        analyzeFreed()
         traverseMainArenaChunks()
         traverseThreadArenaChunks()
     }
@@ -125,8 +130,75 @@ public final class GlibcMallocAnalyzer {
         return result
     }
 
+    private func analyzeFreed() {
+        analyzeFastBins(arenaBase: mainArena.segment.lowerBound)
+        analyzeBins(arenaBase: mainArena.segment.lowerBound)
+
+        for region in exploredHeap {
+            guard 
+                case .mallocState = region.properties.rebound
+            else {
+                continue
+            }
+
+            analyzeFastBins(arenaBase: region.range.lowerBound)
+            analyzeBins(arenaBase: region.range.lowerBound)
+        }
+    }
+
+    private func analyzeFastBins(arenaBase: UInt64) {
+        let firstOffset = MemoryLayout<malloc_state>.offset(of: \.fastbinsY.0)!
+        let fastbinPtrSize = MemoryLayout<mfastbinptr>.size
+        let fdOffset = MemoryLayout<malloc_chunk>.offset(of: \.fd)!
+        let fastBinsCount = macro_NFASTBINS()
+
+        let fastBinBases = (0..<fastBinsCount).map { index in
+            UInt64(firstOffset - fdOffset + index * fastbinPtrSize) + arenaBase
+        }
+
+        fastBinBases.forEach { currentFastbin in
+            findFreedChunks(storeTo: &self.fastbinFreedChunks, arenaChunkBase: currentFastbin) { $0 != nil }
+        }
+    }
+
+    private func analyzeBins(arenaBase: UInt64) {
+        let firstOffset = MemoryLayout<malloc_state>.offset(of: \.bins.0)!
+        let binPtrSize = MemoryLayout<mchunkptr>.size * 2
+        let fdOffset = MemoryLayout<malloc_chunk>.offset(of: \.fd)!
+        let binsTotal = macro_NBINS_TOTAL() / 2
+
+        let binBases = (0..<binsTotal).map { index in
+            UInt64(firstOffset - fdOffset + index * binPtrSize) + arenaBase
+        }
+
+        binBases.forEach { currentBinBase in
+            findFreedChunks(storeTo: &self.binFreedChunks, arenaChunkBase: currentBinBase) { $0 != currentBinBase }
+        }
+    }
+
+    private func findFreedChunks(storeTo buffer: inout Set<UInt64>, arenaChunkBase: UInt64, whileFd: (UInt64?) -> Bool) {
+        var nextChunk: UInt64? = arenaChunkBase
+        // Insert any iterated chunk to buffer. Ignore the first chunk, since it is arena chunk. If fd is nil, abort.
+        while let current = nextChunk {
+            let fdBase = BoundRemoteMemory<malloc_chunk>(pid: pid, load: current).buffer.fd.flatMap { UInt64(UInt(bitPattern: $0)) }
+            guard whileFd(fdBase) else {
+                return
+            }
+            nextChunk = fdBase
+
+            guard current != nextChunk else {
+                error("Error: Endless cycle in chunk \(String(format: "%016lx", current)) while iterating bin  \(String(format: "%016lx", arenaChunkBase))")
+                return
+            }
+
+            if let nextChunk = nextChunk {
+                buffer.insert(nextChunk)
+            }
+        }
+    }
+
     func traverseMainArenaChunks() {
-        let topChunk = UInt64(Int(bitPattern: mainArena.buffer.top))
+        let topChunk = UInt64(UInt(bitPattern: mainArena.buffer.top))
         guard let mainHeapMap = getMapIndex(for: topChunk) else {
             error("Error: Top chunk of main arena is outside mapped memory!")
             return
@@ -190,16 +262,32 @@ public final class GlibcMallocAnalyzer {
         while chunkArea.contains(currentTop) {
             let chunk = BoundRemoteMemory<malloc_chunk>(pid: pid, load: currentTop)
             if chunk.buffer.isPreviousInUse == false, chunks.count > 0 {
-                chunks[chunks.count - 1].properties.rebound = .mallocChunk(.heapFreed)
+                if 
+                    case let .mallocChunk(state) = chunks[chunks.count - 1].properties.rebound, 
+                    ![GlibcMallocChunkState.heapFastBin, .heapBin].contains(state)
+                {
+                    error("Error: Chunk \(chunks[chunks.count - 1].range) is before chunk marked as `previous is not active` and has state \(state)")
+                    chunks[chunks.count - 1].properties.rebound = .mallocChunk(.heapNoBinFree)
+                }
             }
             let chunkRange = currentTop..<(currentTop + chunk.buffer.size)
             guard chunkRange.count > 0 else {
                 error("Error: Chunk \(chunkRange) with range 0 in area \(chunkArea)")
                 break
             }
+
+            var chunkState: GlibcMallocChunkState
+            if binFreedChunks.contains(chunkRange.lowerBound) {
+                chunkState = .heapBin
+            } else if fastbinFreedChunks.contains(chunkRange.lowerBound) {
+                chunkState = .heapFastBin
+            } else {
+                chunkState = .heapActive
+            }
+
             chunks.append(GlibcMallocRegion(
                 range: chunkRange, 
-                properties: .init(rebound: .mallocChunk(.heapActive), explored: true)
+                properties: .init(rebound: .mallocChunk(chunkState), explored: true)
             ))
             currentTop = chunkRange.upperBound
         }

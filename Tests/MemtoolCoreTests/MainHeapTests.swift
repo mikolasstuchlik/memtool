@@ -1,7 +1,7 @@
 import XCTest
 @testable import MemtoolCore
 
-let mallocNoFrees = 
+let commons = 
 #"""
 #include <stdlib.h>
 #include <stdio.h>
@@ -14,6 +14,10 @@ int * cl(long long capacity) {
     return ptr;
 }
 
+"""#
+
+let mallocNoFrees = commons +
+#"""
 int main(void) {
     int * a = cl(0x1);
     int * b = cl(0x102);
@@ -31,19 +35,8 @@ int main(void) {
 
 """#
 
-let mallocInnerFrees = 
+let mallocInnerFrees = commons +
 #"""
-#include <stdlib.h>
-#include <stdio.h>
-
-int * cl(long long capacity) {
-    int * ptr = malloc(capacity * sizeof(int));
-    for(long long i = 0; i < capacity; i++) {
-        memcpy(&ptr[i], "ABCDEFHIJKLMN", sizeof(int));
-    }
-    return ptr;
-}
-
 int main(void) {
     int * a = cl(0x1);
     int * b = cl(0x102);
@@ -68,7 +61,7 @@ int main(void) {
 final class MainHeapTests: XCTestCase {
     func testMallocNoFrees() throws {
         let program = try AdhocProgram(
-            name: String(describing: Self.self), 
+            name: String(describing: Self.self) + #function, 
             code: mallocNoFrees
         )
 
@@ -112,8 +105,8 @@ final class MainHeapTests: XCTestCase {
 
     func testMallocWithFrees() throws {
         let program = try AdhocProgram(
-            name: String(describing: Self.self), 
-            code: mallocNoFrees
+            name: String(describing: Self.self) + #function, 
+            code: mallocInnerFrees
         )
 
         let output = program.readStdout(until: ";")
@@ -132,6 +125,8 @@ final class MainHeapTests: XCTestCase {
         let analyzer = try GlibcMallocAnalyzer(session: session)
         analyzer.analyze()
 
+        print(analyzer.mainArena.buffer)
+
         // First malloc chunk is unknown chunk allocated from reasons unknown to me
         // Next 6 malloc chunks are allocated by the program
         // Last (8th) malloc chunk is probably some kind of buffer for stdout.
@@ -143,15 +138,25 @@ final class MainHeapTests: XCTestCase {
             XCTAssertEqual(chunk.content.asAsciiString, asciiContent)
         }
 
+        print( 
+            analyzer.exploredHeap.map {
+                var str = ""
+                str += "\($0)"
+                str += Chunk(pid: session.pid, baseAddress: $0.range.lowerBound).content.asAsciiString
+                return str
+            }.joined(separator: "\n")
+        )
+
         // FIXME: Test not passing, CRITICAL BUG: Chunk being freed is solely determined by `isNextInUse`, meanwhile documentation states, that chunk is freed also if it is in fastbin. Implement fastbin exploration!
-        XCTAssertEqual(analyzer.exploredHeap[1].properties.rebound, .mallocChunk(.heapFreed))
-        XCTAssertEqual(analyzer.exploredHeap[2].properties.rebound, .mallocChunk(.heapFreed))
-        XCTAssertEqual(analyzer.exploredHeap[3].properties.rebound, .mallocChunk(.heapFreed))
+        XCTAssertEqual(analyzer.exploredHeap[1].properties.rebound, .mallocChunk(.heapFastBin))
+        XCTAssertEqual(analyzer.exploredHeap[2].properties.rebound, .mallocChunk(.heapFastBin))
+        XCTAssertEqual(analyzer.exploredHeap[3].properties.rebound, .mallocChunk(.heapFastBin))
         checkChunk(index: 4, asciiContent: String(repeating: "ABCD", count: 0x12) + #""#)
         checkChunk(index: 5, asciiContent: String(repeating: "ABCD", count: 0x1) + #"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"#)
         checkChunk(index: 6, asciiContent: String(repeating: "ABCD", count: 0x10) + #"\0\0\0\0\0\0\0\0"#)
 
         let stdoutChunk = Chunk(pid: program.runningProgram.processIdentifier, baseAddress: analyzer.exploredHeap[7].range.lowerBound)
         XCTAssertTrue(stdoutChunk.content.asAsciiString.hasPrefix(output))
+
     }
 }

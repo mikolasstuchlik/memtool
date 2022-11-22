@@ -17,6 +17,7 @@ final class AdhocProgram {
     init(name: String, code: String, arguments: String = "") throws {
         self.code = code
         self.arguments = arguments
+        let name = name.filter { $0.unicodeScalars.allSatisfy(CharacterSet.letters.contains(_:)) }
         self.programName = name
         
         let codePath = AdhocProgram.tmpFolder.appendingPathComponent("code" + name + ".c")

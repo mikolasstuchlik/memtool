@@ -12,7 +12,16 @@ public struct GlibcMallocMapAnalysis {
 }
 
 public enum GlibcMallocChunkState: Equatable {
-    case mmapped, heapActive, heapFreed, topChunk
+    case mmapped, heapActive, heapNoBinFree, topChunk, heapBin, heapFastBin
+
+    var isActive: Bool {
+        switch self {
+        case .mmapped, .heapActive:
+            return true
+        case .heapNoBinFree, .heapFastBin, .heapBin, .topChunk:
+            return false
+        }
+    }
 }
 
 public enum GlibcMallocAssumedRebound: Equatable {
