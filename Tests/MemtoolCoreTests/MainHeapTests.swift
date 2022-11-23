@@ -5,6 +5,7 @@ let commons =
 #"""
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 int * cl(long long capacity) {
     int * ptr = malloc(capacity * sizeof(int));
@@ -147,7 +148,8 @@ final class MainHeapTests: XCTestCase {
             }.joined(separator: "\n")
         )
 
-        // FIXME: Test not passing, CRITICAL BUG: Chunk being freed is solely determined by `isNextInUse`, meanwhile documentation states, that chunk is freed also if it is in fastbin. Implement fastbin exploration!
+        // FIXME: Test not passing, CRITICAL BUG: Chunks freed into tcache are not being listed as free. Read tcahce. 
+        // https://codebrowser.dev/glibc/glibc/malloc/malloc.c.html#3140
         XCTAssertEqual(analyzer.exploredHeap[1].properties.rebound, .mallocChunk(.heapFastBin))
         XCTAssertEqual(analyzer.exploredHeap[2].properties.rebound, .mallocChunk(.heapFastBin))
         XCTAssertEqual(analyzer.exploredHeap[3].properties.rebound, .mallocChunk(.heapFastBin))

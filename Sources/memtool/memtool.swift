@@ -334,6 +334,7 @@ let chunkOperation = Operation(keyword: "chunk", help: "[hexa pointer] Attempts 
 
     let chunk = Chunk(pid: session.pid, baseAddress: base)
     print(chunk.cliPrint)
+    print("Content as ascii:\n" + chunk.content.asAsciiString)
 
     return true
 }
