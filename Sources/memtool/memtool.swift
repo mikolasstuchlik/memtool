@@ -362,7 +362,7 @@ https://fasterthanli.me/series/making-our-own-executable-packer/part-13#c-progra
 # Notes:
 
 ## Getting the TLS:
-(lldb) image lookup -rs 'pthread_self' -v // yealds 0x7ffff6896c00 as a base address in RAM
+(lldb) image lookup -rs 'pthread_self' -v // yields 0x7ffff6896c00 as a base address in RAM
 (lldb) disassemble -s 0x7ffff6896c00 -c3
 libc.so.6`:
     0x7ffff6896c00 <+0>:  endbr64 
@@ -388,7 +388,7 @@ occurances of "errno" with call to the "__errno_location" function and dereferen
 is done probably in order to hide the location of errno).
 
 Finding and disassembling __errno_location is fairly simple, since it is only "a getter function."
-(lldb) image lookup -rs '__errno_location' -v // yealds 0x00007ffff7c239d0  as a base address in RAM
+(lldb) image lookup -rs '__errno_location' -v // yields 0x00007ffff7c239d0  as a base address in RAM
 (lldb) disassemble -s 0x00007ffff7c239d0
 libc.so.6`:
     0x7ffff7c239d0 <+0>:  endbr64
@@ -408,8 +408,8 @@ The `tcache` is very similar to `errno`. We just need to find some function wher
 is used. Such function is `_int_free` in glibc/malloc/malloc.c:4414 where on line 4445 `tcache` is
 compared to NULL.
 
-Tapping into LLDB yealds followin result: 
-(lldb) image lookup -rs 'int_free' -v // yealds 0x00007ffff7c239d0  as a base address in RAM
+Tapping into LLDB yields followin result: 
+(lldb) image lookup -rs 'int_free' -v // yields 0x00007ffff7c239d0  as a base address in RAM
 The base is 0x00007ffff7c239d0 but the relevant test is on +91, therefore we call
 (lldb) disassemble -s 0x7ffff7c9ddeb -c 5
 libc.so.6`_int_free:
@@ -423,7 +423,7 @@ Since both pointers in GOT should be near, following result should be reasonably
 errno                         tcache
 (0x7ffff7c239d4 + 0x1d2405) - (0x7ffff7c9ddeb + 0x157f86) = 0x68
 
-(lldb) image list // yealds that libc is loaded at 0x00007ffff7c00000
+(lldb) image list // yields that libc is loaded at 0x00007ffff7c00000
 
 ## Eh, what now?
 So on order to locate `tcache` I need the TCB [check], location of glibc GOT and `tcache` offset in GOT.
@@ -435,7 +435,7 @@ the loaded code :/
 */
 
 let tcbOperation = Operation(keyword: "tcb", help: "Locates and prints Thread Control Block for traced thread") { input, ctx -> Bool in
-    guard input == "gp" else {
+    guard input == "tcb" else {
         return false
     }
 
