@@ -1,6 +1,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <malloc.h>
+
+#include <unistd.h>
+#include <sys/user.h>
+#include <sys/syscall.h>
+#include <sys/ptrace.h>
+
 #include "include/ptrace_utils.h"
 
 #define WORD 8
@@ -45,4 +51,12 @@ void swift_inspect_bridge__ptrace_peekdata_buffer(pid_t pid, uint64_t base_addre
         data.word = ptrace(PTRACE_PEEKDATA, pid, base_address + full_pointers * WORD);
         memcpy(buffer + full_pointers * WORD, data.bytes, remainder); 
     }
+}
+
+size_t swift_inspect_bridge__ptrace_peekuser(pid_t pid, int offset_in_words) {
+    return ptrace(PTRACE_PEEKUSER, pid, WORD * offset_in_words);
+}
+
+long int swift_inspect_bridge__ptrace_get_thread_area(pid_t pid, size_t gdt_index, struct user_desc * _Nonnull buffer) {
+    return ptrace(PTRACE_GET_THREAD_AREA, pid, gdt_index, buffer);
 }
