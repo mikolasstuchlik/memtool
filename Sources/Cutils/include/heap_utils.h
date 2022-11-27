@@ -155,7 +155,7 @@ typedef struct
   int gscope_flag;
   uintptr_t sysinfo;
   uintptr_t stack_guard;
-  uintptr_t pointer_guard;
+  uintptr_t pointer_guard; 
   unsigned long int unused_vgetcpu_cache[2];
   /* Bit 0: X86_FEATURE_1_IBT.
      Bit 1: X86_FEATURE_1_SHSTK.
