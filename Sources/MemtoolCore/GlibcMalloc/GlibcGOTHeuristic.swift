@@ -94,5 +94,143 @@ I'm not at the moment aware of better solution, so I'll implement following algo
  - compute tls offsets from GOT - discard misaligned results (dump to stderr)
  - from sane values, compute `tcache` offset
 
- l_tls_modid
+ 
+## With ld usage
+ - Search for `.bss` symbol `r_debug`
+ - Bind `r_debug` to `struct r_debug`
+ - `r_debug.r_map` is a link map
+ - You can bind `r_debug.r_map` to `struct link_map` but important fields lie in private part
+ - Create aligned copy of source code version of `struct link_map` renamed to `struct link_map_private`
+ - Get tls offset from `r_debug.r_map.l_tls_modid`
+ - Obtain `struct tcbhead_t`
+ - Beginning of tls for desired binary should be in `tcbhead.dtv[r_debug.r_map.l_tls_modid]`
 */
+
+public final class TbssSymbolGlibcLdHeuristic {
+    public enum Error: Swift.Error {
+        case initializeSessionWithMapAndSymbols
+        case noSuchTbssSymbolOrFile
+        case couldNotfindGlibcRdebug
+        case couldNotLocateLinkItem
+        case fsBaseNotInReadableSpace
+        case dtvNotInitialized
+        case dtvTooSmall
+        case symbolNotInReadableSpace
+    }
+
+    public let pid: Int32
+    public let symbolName: String
+    public let fileName: String
+
+    public let symbol: UnloadedSymbolInfo
+    public let rDebug: SymbolRegion
+    public let privateLinkItem: BoundRemoteMemory<link_map_private>
+    public let fsBase: UInt64
+    public let dtvBase: UInt64
+    public let indexDtv: BoundRemoteMemory<dtv_t>
+    public let loadedSymbolBase: UInt64
+
+    public init(session: Session, fileName: String, tbssSymbolName: String) throws {
+        self.pid = session.pid
+        self.symbolName = tbssSymbolName
+        self.fileName = fileName
+
+        // Assert, that everything is initialized
+        guard 
+            let map = session.map, 
+            let unloadedSymbols = session.unloadedSymbols,
+            let symbols = session.symbols 
+        else {
+            throw Error.initializeSessionWithMapAndSymbols
+        }
+
+        // Find that desired symbol exists in .tbss
+        guard let symbolReference = unloadedSymbols[fileName]?.first(where: { $0.segment == .known(.tbss) && $0.name == tbssSymbolName }) else {
+            throw Error.noSuchTbssSymbolOrFile
+        }
+        self.symbol = symbolReference
+
+        // Locate r_debug
+        let rDebugLocation = symbols.first { symbol in
+            if 
+                symbol.properties.name == "r_debug",
+                case let .other(file) = symbol.properties.segment,
+                GlibcAssurances.fileFromGlibc(file, unloadedSymbols: unloadedSymbols)
+            {
+                return true
+            }
+
+            return false
+        }
+        guard let rDebugLocation else {
+            throw Error.couldNotfindGlibcRdebug
+        }
+        self.rDebug = rDebugLocation
+
+        // Iterate link items in r_debug and locate item for this file
+        guard let linkItem = TbssSymbolGlibcLdHeuristic.iterateRDebug(pid: pid, symbol: rDebug, file: fileName) else {
+            throw Error.couldNotLocateLinkItem
+        }
+
+        // Rebound to link_item_private. Following code braks Glibc guarentees and needs to be validated!
+        let privateLinkItem = BoundRemoteMemory<link_map_private>(pid: pid, load: linkItem.segment.lowerBound)
+        self.privateLinkItem = privateLinkItem
+        let index = privateLinkItem.buffer.l_tls_modid
+
+        // Get FS register
+        let fsBase = UInt64(UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE)))
+        self.fsBase = fsBase
+        guard map.contains(where: { $0.range.contains(fsBase) && $0.properties.flags.contains([.read, .write])}) == true else {
+            throw Error.fsBaseNotInReadableSpace
+        }
+
+        let head = BoundRemoteMemory<tcbhead_t>(pid: session.pid, load: fsBase)
+        guard head.buffer.dtv != nil else {
+            throw Error.dtvNotInitialized
+        }
+        let dtvBase = UInt64(UInt(bitPattern: head.buffer.dtv))
+        self.dtvBase = dtvBase
+        let dtvSizeBase = dtvBase - UInt64(MemoryLayout<dtv_t>.size)
+        let dtvCount = BoundRemoteMemory<dtv_t>(pid: pid, load: dtvSizeBase)
+        guard dtvCount.buffer.counter >= index else {
+            throw Error.dtvTooSmall
+        }
+
+        let indexDtvBase = dtvBase + UInt64(index * MemoryLayout<dtv_t>.size)
+        self.indexDtv = BoundRemoteMemory<dtv_t>(pid: pid, load: indexDtvBase)
+        let loadedSymbolBase = UInt64(UInt(bitPattern: indexDtv.buffer.pointer.val)) + symbolReference.location
+        self.loadedSymbolBase = loadedSymbolBase
+        guard map.contains(where: { $0.range.contains(loadedSymbolBase) && $0.properties.flags.contains([.read, .write])}) == true else {
+            throw Error.symbolNotInReadableSpace
+        }
+    }
+
+
+    private static func iterateRDebug(pid: Int32, symbol: SymbolRegion, file: String) -> BoundRemoteMemory<link_map>? {
+        let rDebugContent = BoundRemoteMemory<r_debug>(pid: pid, load: symbol.range.lowerBound)
+        let loadLimit = UInt64(file.utf8.count)
+
+        var nextLink = rDebugContent.buffer.r_map
+        repeat {
+            guard let linkPtr = nextLink else {
+                break
+            }
+
+            let linkBase = UInt64(UInt(bitPattern: linkPtr))
+            let link = BoundRemoteMemory<link_map>(pid: pid, load: linkBase)
+            let nameBase = UInt64(UInt(bitPattern: link.buffer.l_name))
+            let name = RawRemoteMemory(pid: pid, load: nameBase..<(nameBase + loadLimit))
+            let nameString = String(cString: Array(name.buffer))
+            guard nameString != file else {
+                return link
+            }
+            nextLink = link.buffer.l_next
+        } while (nextLink != rDebugContent.buffer.r_map)
+
+        return nil
+    }
+}
+
+public final class GlibcErrnoAsmHeuristic {
+
+}

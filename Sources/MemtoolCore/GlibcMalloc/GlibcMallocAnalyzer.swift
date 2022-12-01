@@ -33,7 +33,7 @@ public final class GlibcMallocAnalyzer {
         guard 
             let mainArenaInMap = map.first(where: { $0.range.contains(mainArena.range.lowerBound) }),
             case let .file(mainArenaFile) = mainArenaInMap.properties.pathname,
-            unloadedSymbols[mainArenaFile]?.contains(where: { $0.name.hasPrefix("GLIBC_2.") && $0.segment == .known(.abs) }) == true 
+            GlibcAssurances.fileFromGlibc(mainArenaFile, unloadedSymbols: unloadedSymbols)
         else {
             throw Error.onlySupportsGlibcMalloc
         }

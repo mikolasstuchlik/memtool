@@ -88,6 +88,8 @@ public struct LoadedSymbolInfo {
 public enum KnownSymbolSection: String {
     /// Uninitialized program memory
     case bss = ".bss"   
+    case tbss = ".tbss"
+    case tbssPlt = ".tbss.plt"
     case comment = ".comment"
     case ctors = ".ctors"
     /// Initialized program memory
