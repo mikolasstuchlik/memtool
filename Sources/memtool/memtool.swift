@@ -35,7 +35,8 @@ let operations: [Operation] = [
     chunkOperation,
     tcbOperation,
     wordOperation,
-    tbssSymbolOperation
+    tbssSymbolOperation,
+    errnoGotOperation
 ]
 
 let helpOperation = Operation(keyword: "help", help: "Shows available commands on stdout.") { input, ctx -> Bool in
@@ -442,7 +443,6 @@ let wordOperation = Operation(keyword: "word", help: "[decimal count] [hex point
     return true
 }
 
-
 let tbssSymbolOperation = Operation(keyword: "tbss", help: "\"symbol name\" \"file name\" Attempts to locate tbss symbol in a file") { input, ctx -> Bool in
     guard input.hasPrefix("tbss") else {
         return false
@@ -469,6 +469,37 @@ let tbssSymbolOperation = Operation(keyword: "tbss", help: "\"symbol name\" \"fi
         let result = try TbssSymbolGlibcLdHeuristic(session: session, fileName: file, tbssSymbolName: symbol)
         print(result)
         print("Symbol base \(result.loadedSymbolBase.cliPrint)")
+    } catch {
+        MemtoolCore.error("Error: Failed to locate tbss symbol: \(error)")
+    }
+
+    return true
+}
+
+let errnoGotOperation = Operation(keyword: "errnoGot", help: "\"glibc file name\" Attempts to parse `errno` location from disassembly in order to verify results of other heuristics.") { input, ctx -> Bool in
+    guard input.hasPrefix("errnoGot") else {
+        return false
+    }
+    let payload = input.trimmingPrefix("errnoGot").trimmingCharacters(in: .whitespaces)
+    let components = payload.components(separatedBy: " ")
+    guard 
+        components.count == 1,
+        components[0].hasPrefix("\""), components[0].hasSuffix("\"")
+    else {
+        return false
+    }
+
+    let path = components[0].trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+
+    guard let session = ctx.session else {
+        MemtoolCore.error("Error: Not attached to a session!")
+        return true
+    }
+
+    do {
+        let result = try GlibcErrnoAsmHeuristic(session: session, glibcPath: path)
+        print(result)
+        print("Errno base \(result.errnoLocation.cliPrint)")
     } catch {
         MemtoolCore.error("Error: Failed to locate tbss symbol: \(error)")
     }

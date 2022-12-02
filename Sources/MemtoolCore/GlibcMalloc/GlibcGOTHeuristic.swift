@@ -1,4 +1,7 @@
 import Cutils
+import Foundation
+import RegexBuilder
+import _StringProcessing
 
 /*
 Abbreviations:
@@ -199,9 +202,9 @@ public final class TbssSymbolGlibcLdHeuristic {
         let loadedSymbolBase = UInt64(UInt(bitPattern: indexDtv.buffer.pointer.val)) + symbolReference.location
         self.loadedSymbolBase = loadedSymbolBase
 
-        // guard map.contains(where: { $0.range.contains(loadedSymbolBase) && $0.properties.flags.contains([.read, .write])}) == true else {
-        //     throw Error.symbolNotInReadableSpace
-        // }
+        guard map.contains(where: { $0.range.contains(loadedSymbolBase) && $0.properties.flags.contains([.read, .write])}) == true else {
+            throw Error.symbolNotInReadableSpace
+        }
     }
 
 
@@ -233,4 +236,180 @@ public final class TbssSymbolGlibcLdHeuristic {
 
 public final class GlibcErrnoAsmHeuristic {
 
+    private static let hexanumberRef = Reference(Substring.self)
+
+    private static let regex: Regex = {
+        let hexadec = Regex {
+            Optionally {
+                "0x"
+            }
+            OneOrMore(.hexDigit)
+        }
+        
+        return Regex {
+            "rax,QWORD PTR [rip+"
+            Capture(as: hexanumberRef) {
+                hexadec
+            }
+            "]"
+        }
+    }()
+
+
+    public enum Error: Swift.Error {
+        case initializeSessionWithMap
+        case disassembleEmptyResult
+        case assemblyParsingFailed
+        case assemblyInvariantFailed
+        case glibcNotLocatedInMemory
+    }
+
+    public struct AssemblyLine {
+        public let address: String
+        public let raw: String
+        public let opcode: String
+        public let argument: String
+
+        public init(array: [String]) {
+            self.address = array.count >= 1 ? array[0] : ""
+            self.raw = array.count >= 2 ? array[1] : ""
+            if array.count >= 3 { 
+                let components = array[2].components(separatedBy: "  ").map { $0.trimmingCharacters(in: .whitespacesAndNewlines )}.filter { !$0.isEmpty }
+                
+                self.opcode = components.count >= 1 ? components[0] : ""
+                self.argument = components.count >= 2 ? components[1] : ""
+            } else {
+                self.opcode = ""
+                self.argument = ""
+            }
+        }
+    }
+
+    public let pid: Int32
+    public let glibcPath: String
+
+    public let rawProcessOutput: String
+    public let errnoLocation: UInt64
+
+    public init(session: Session, glibcPath: String) throws {
+        self.pid = session.pid
+        self.glibcPath = glibcPath
+
+        // Assert, that everything is initialized
+        guard 
+            let map = session.map
+        else {
+            throw Error.initializeSessionWithMap
+        }
+
+        self.rawProcessOutput = GlibcErrnoAsmHeuristic.getErrnoLocationDisassembly(for: glibcPath)
+        guard !rawProcessOutput.isEmpty else {
+            throw Error.disassembleEmptyResult
+        }
+
+        let lines = rawProcessOutput.components(separatedBy: "\n")
+        guard 
+            let preambleEnd = lines.firstIndex(where: { $0.contains("<__errno_location")}),
+            lines.endIndex > preambleEnd
+        else {
+            throw Error.assemblyParsingFailed
+        }
+
+        let assemblyLines = lines[lines.index(after: preambleEnd)...]
+
+        guard assemblyLines.count >= 3 else {
+            throw Error.assemblyParsingFailed
+        }
+
+        let assemblyLineComponents = assemblyLines.map { 
+                $0.components(separatedBy: "\t")
+                .filter { !$0.isEmpty }
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } 
+            }.map(AssemblyLine.init(array:))
+
+        // Notice: we know there are at least 3 items in the array
+        guard 
+            assemblyLineComponents[0].opcode == "endbr64",
+            assemblyLineComponents[1].opcode == "mov",
+            assemblyLineComponents[2].opcode == "add", 
+            assemblyLineComponents[2].argument == "rax,QWORD PTR fs:0x0"
+        else {
+            throw Error.assemblyInvariantFailed
+        }
+
+        guard let rip = UInt64(assemblyLineComponents[1].address.trimmingCharacters(in: CharacterSet(charactersIn: ":")), radix: 16) else {
+            throw Error.assemblyParsingFailed
+        }
+
+        guard 
+            let result = try? GlibcErrnoAsmHeuristic.regex.firstMatch(in: assemblyLineComponents[1].argument),
+            let address = UInt64(String(result[GlibcErrnoAsmHeuristic.hexanumberRef]).trimmingPrefix("0x"), radix: 16)
+        else {
+            throw Error.assemblyParsingFailed
+        }
+
+        let gotOffset = address + rip
+
+        let glibcBase: UInt64? = map.reduce(nil) { prev, current -> UInt64? in
+            if case let .file(file) = current.properties.pathname, file == glibcPath {
+                if let prev {
+                    return min(prev, current.range.lowerBound)
+                }
+                return current.range.lowerBound
+            }
+            return prev
+        }
+
+        guard let glibcBase else { throw Error.glibcNotLocatedInMemory }
+
+        let gotOffsetLocation = glibcBase + gotOffset
+
+        // This access should be checked.
+        let fsOffsetToErrno = BoundRemoteMemory<UInt64>(pid: pid, load: gotOffsetLocation)
+        
+        // Get FS register
+        let fsBase = UInt64(UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE)))
+
+        // This MUST overflow. errno should be located on lower address than FS
+        self.errnoLocation = fsOffsetToErrno.buffer + fsBase
+    }
+
+/* Example of disassembly
+$ objdump --disassemble=__errno_location -j .text -M intel /usr/lib/x86_64-linux-gnu/libc.so.6
+
+/usr/lib/x86_64-linux-gnu/libc.so.6:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+00000000000239d0 <__errno_location@@GLIBC_2.2.5>:
+   239d0:       f3 0f 1e fa             endbr64
+   239d4:       48 8b 05 05 24 1d 00    mov    rax,QWORD PTR [rip+0x1d2405]        # 1f5de0 <h_errlist@@GLIBC_2.2.5+0xb80>
+   239db:       64 48 03 04 25 00 00    add    rax,QWORD PTR fs:0x0
+   239e2:       00 00
+   239e4:       c3                      ret
+*/
+    private static func getErrnoLocationDisassembly(for glibcPath: String) -> String {
+        let process = Process()
+        let aStdout = Pipe()
+        let aStderr = Pipe()
+
+        process.executableURL = URL(fileURLWithPath: "/bin/env")
+        process.standardOutput = aStdout
+        process.standardError = aStderr
+        // more info in `man proc`
+        process.arguments = ["bash", "-c", "objdump --disassemble=__errno_location -j .text -M intel \(glibcPath)"]
+
+        try! process.run()
+
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            error("Error: Map failed to load. Path: \(process.executableURL?.path ?? ""), arguments: \(process.arguments ?? []), termination status: \(process.terminationStatus), stderr: \(String(data: aStderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "")") 
+            return "" 
+        }
+        let result = String(data: aStdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+
+        return result!
+    }
 }
