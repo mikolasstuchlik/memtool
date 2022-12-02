@@ -34,7 +34,8 @@ let operations: [Operation] = [
     analyzeOperation,
     chunkOperation,
     tcbOperation,
-    wordOperation
+    wordOperation,
+    tbssSymbolOperation
 ]
 
 let helpOperation = Operation(keyword: "help", help: "Shows available commands on stdout.") { input, ctx -> Bool in
@@ -388,7 +389,7 @@ let tcbOperation = Operation(keyword: "tcb", help: "Locates and prints Thread Co
     return true
 }
 
-let wordOperation = Operation(keyword: "word", help: "[decimal count] [hex pointer] [-a] Dumps given amount of 64bit words; Use [-a] if you want the result in ASCII (`count` will load be 8*count bit instad of 64*count bit).") { input, ctx -> Bool in
+let wordOperation = Operation(keyword: "word", help: "[decimal count] [hex pointer] [-a] Dumps given amount of 64bit words; Use [-a] if you want the result in ASCII (`count` will load be 8*count bit instad of 64*count bit). (Note: data are not adjusted for Big Endian.)") { input, ctx -> Bool in
     guard input.hasPrefix("word") else {
         return false
     }
@@ -436,6 +437,40 @@ let wordOperation = Operation(keyword: "word", help: "[decimal count] [hex point
         }
 
         print(memory.map(\.cliPrint).joined(separator: " "))
+    }
+
+    return true
+}
+
+
+let tbssSymbolOperation = Operation(keyword: "tbss", help: "\"symbol name\" \"file name\" Attempts to locate tbss symbol in a file") { input, ctx -> Bool in
+    guard input.hasPrefix("tbss") else {
+        return false
+    }
+    let payload = input.trimmingPrefix("tbss").trimmingCharacters(in: .whitespaces)
+    let components = payload.components(separatedBy: " ")
+    guard 
+        components.count == 2,
+        components[0].hasPrefix("\""), components[0].hasSuffix("\""),
+        components[1].hasPrefix("\""), components[1].hasSuffix("\"")
+    else {
+        return false
+    }
+
+    let symbol = components[0].trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+    let file = components[1].trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+
+    guard let session = ctx.session else {
+        MemtoolCore.error("Error: Not attached to a session!")
+        return true
+    }
+
+    do {
+        let result = try TbssSymbolGlibcLdHeuristic(session: session, fileName: file, tbssSymbolName: symbol)
+        print(result)
+        print("Symbol base \(result.loadedSymbolBase.cliPrint)")
+    } catch {
+        MemtoolCore.error("Error: Failed to locate tbss symbol: \(error)")
     }
 
     return true

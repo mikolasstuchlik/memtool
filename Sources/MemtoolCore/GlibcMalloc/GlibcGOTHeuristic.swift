@@ -150,12 +150,10 @@ public final class TbssSymbolGlibcLdHeuristic {
         }
         self.symbol = symbolReference
 
-        // Locate r_debug
+        // Locate r_debug TODO: Should probably verify that address belongs to glib
         let rDebugLocation = symbols.first { symbol in
             if 
-                symbol.properties.name == "r_debug",
-                case let .other(file) = symbol.properties.segment,
-                GlibcAssurances.fileFromGlibc(file, unloadedSymbols: unloadedSymbols)
+                symbol.properties.name == "_r_debug"
             {
                 return true
             }
@@ -200,9 +198,10 @@ public final class TbssSymbolGlibcLdHeuristic {
         self.indexDtv = BoundRemoteMemory<dtv_t>(pid: pid, load: indexDtvBase)
         let loadedSymbolBase = UInt64(UInt(bitPattern: indexDtv.buffer.pointer.val)) + symbolReference.location
         self.loadedSymbolBase = loadedSymbolBase
-        guard map.contains(where: { $0.range.contains(loadedSymbolBase) && $0.properties.flags.contains([.read, .write])}) == true else {
-            throw Error.symbolNotInReadableSpace
-        }
+
+        // guard map.contains(where: { $0.range.contains(loadedSymbolBase) && $0.properties.flags.contains([.read, .write])}) == true else {
+        //     throw Error.symbolNotInReadableSpace
+        // }
     }
 
 
@@ -221,7 +220,8 @@ public final class TbssSymbolGlibcLdHeuristic {
             let nameBase = UInt64(UInt(bitPattern: link.buffer.l_name))
             let name = RawRemoteMemory(pid: pid, load: nameBase..<(nameBase + loadLimit))
             let nameString = String(cString: Array(name.buffer))
-            guard nameString != file else {
+            // While debugging, it was discovered, that ld string contains only part of the path, "/lib/x86_64-linux-gnu/libc.so.6" instead of "/usr/lib/x86_64-linux-gnu/libc.so.6"
+            if !nameString.isEmpty, file.hasSuffix(nameString) {
                 return link
             }
             nextLink = link.buffer.l_next
