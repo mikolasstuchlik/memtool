@@ -328,7 +328,7 @@ let analyzeOperation = Operation(keyword: "analyze", help: "Attempts to enumerat
 
     do {
         ctx.glibcMallocExplorer = try GlibcMallocAnalyzer(session: session)
-        ctx.glibcMallocExplorer?.analyze()
+        try ctx.glibcMallocExplorer?.analyze()
     } catch {
         MemtoolCore.error("Error: Glibc exlorer ended with error: \(error)")
     }
