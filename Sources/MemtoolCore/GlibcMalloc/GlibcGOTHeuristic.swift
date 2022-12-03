@@ -207,7 +207,6 @@ public final class TbssSymbolGlibcLdHeuristic {
         }
     }
 
-
     private static func iterateRDebug(pid: Int32, symbol: SymbolRegion, file: String) -> BoundRemoteMemory<link_map>? {
         let rDebugContent = BoundRemoteMemory<r_debug>(pid: pid, load: symbol.range.lowerBound)
         let loadLimit = UInt64(file.utf8.count)
@@ -255,13 +254,13 @@ public final class GlibcErrnoAsmHeuristic {
         }
     }()
 
-
     public enum Error: Swift.Error {
         case initializeSessionWithMap
         case disassembleEmptyResult
         case assemblyParsingFailed
         case assemblyInvariantFailed
         case glibcNotLocatedInMemory
+        case additionFsandGotDidNotOverflow
     }
 
     public struct AssemblyLine {
@@ -337,7 +336,8 @@ public final class GlibcErrnoAsmHeuristic {
             throw Error.assemblyInvariantFailed
         }
 
-        guard let rip = UInt64(assemblyLineComponents[1].address.trimmingCharacters(in: CharacterSet(charactersIn: ":")), radix: 16) else {
+        // Via debugger I have determined, that the correct value requires `rip` to have the value of following instruction :thinking:
+        guard let rip = UInt64(assemblyLineComponents[2].address.trimmingCharacters(in: CharacterSet(charactersIn: ":")), radix: 16) else {
             throw Error.assemblyParsingFailed
         }
 
@@ -371,7 +371,12 @@ public final class GlibcErrnoAsmHeuristic {
         let fsBase = UInt64(UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE)))
 
         // This MUST overflow. errno should be located on lower address than FS
-        self.errnoLocation = fsOffsetToErrno.buffer + fsBase
+        let gotAddition = fsBase.addingReportingOverflow(fsOffsetToErrno.buffer)
+        guard gotAddition.overflow else {
+            throw Error.additionFsandGotDidNotOverflow
+        }
+
+        self.errnoLocation = gotAddition.partialValue
     }
 
 /* Example of disassembly
