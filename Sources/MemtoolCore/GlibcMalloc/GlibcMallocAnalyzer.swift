@@ -42,7 +42,7 @@ public final class GlibcMallocAnalyzer {
         }
 
         self.session = session
-        self.mainArena = BoundRemoteMemory<malloc_state>(pid: pid, load: mainArena.range.lowerBound)
+        self.mainArena = BoundRemoteMemory<malloc_state>(pid: session.pid, load: mainArena.range.lowerBound)
         self.map = map.map { GlibcMallocMapAnalysis(flag: .notYetAnalyzed, mapRegion: $0) }
         self.tcacheFreedChunks = []
         self.exploredHeap = []
