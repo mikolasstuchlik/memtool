@@ -1,3 +1,6 @@
+#ifndef DL_UTILS_H
+#define DL_UTILS_H
+
 #include <stddef.h>
 #include <stdint.h>
 #include <link.h>
@@ -301,3 +304,5 @@ unsigned int l_1_needed;
     size_t l_relro_size;
     unsigned long long int l_serial;
   };
+
+#endif /* DL_UTILS_H */

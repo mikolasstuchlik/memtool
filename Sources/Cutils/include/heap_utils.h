@@ -102,6 +102,27 @@ struct malloc_state
 
 typedef struct malloc_state *mstate;
 
+# define TCACHE_MAX_BINS		64
+
+/* We overlay this structure on the user-data portion of a chunk when
+   the chunk is stored in the per-thread cache.  */
+typedef struct tcache_entry
+{
+  struct tcache_entry *next;
+  /* This field exists to detect double frees.  */
+  uintptr_t key;
+} tcache_entry;
+/* There is one of these for each thread, which contains the
+   per-thread cache (hence "tcache_perthread_struct").  Keeping
+   overall size low is mildly important.  Note that COUNTS and ENTRIES
+   are redundant (we could have just counted the linked list each
+   time), this is for performance reasons.  */
+typedef struct tcache_perthread_struct
+{
+  uint16_t counts[TCACHE_MAX_BINS];
+  tcache_entry *entries[TCACHE_MAX_BINS];
+} tcache_perthread_struct;
+
 //======= glibc/malloc/arena.c
 
 /* A heap is a single contiguous memory region holding (coalesceable)

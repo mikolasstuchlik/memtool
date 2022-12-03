@@ -5,14 +5,17 @@ public final class GlibcMallocAnalyzer {
         case initializeSessionWithMapAndSymbols
         case mainArenaDebugSymbolNotFound
         case onlySupportsGlibcMalloc
+        case couldNotLocateTcacheInDebugSymbols
     }
 
-    public let pid: Int32
+    private let session: Session
+    public var pid: Int32 { session.pid }
 
     // Main arena is excluded from `exploredHeap`, because it is located in the Glibc .data section.
     public let mainArena: BoundRemoteMemory<malloc_state>
 
     public private(set) var map: [GlibcMallocMapAnalysis]
+    public private(set) var tcacheFreedChunks: Set<UInt64>
     public private(set) var fastbinFreedChunks: Set<UInt64>
     public private(set) var binFreedChunks: Set<UInt64>
     public private(set) var exploredHeap: [GlibcMallocRegion]
@@ -38,15 +41,16 @@ public final class GlibcMallocAnalyzer {
             throw Error.onlySupportsGlibcMalloc
         }
 
-        self.pid = session.pid
+        self.session = session
         self.mainArena = BoundRemoteMemory<malloc_state>(pid: pid, load: mainArena.range.lowerBound)
         self.map = map.map { GlibcMallocMapAnalysis(flag: .notYetAnalyzed, mapRegion: $0) }
+        self.tcacheFreedChunks = []
         self.exploredHeap = []
         self.fastbinFreedChunks = []
         self.binFreedChunks = []
     }
 
-    public func analyze() {
+    public func analyze() throws {
         if !exploredHeap.isEmpty {
             error("Warning: Discarding previous explored Glibc heap.")
             exploredHeap = []
@@ -54,7 +58,7 @@ public final class GlibcMallocAnalyzer {
 
         localizeThreadArenas()
         analyzeThreadArenas()
-        analyzeFreed()
+        try analyzeFreed()
         traverseMainArenaChunks()
         traverseThreadArenaChunks()
     }
@@ -130,9 +134,10 @@ public final class GlibcMallocAnalyzer {
         return result
     }
 
-    private func analyzeFreed() {
+    private func analyzeFreed() throws {
         analyzeFastBins(arenaBase: mainArena.segment.lowerBound)
         analyzeBins(arenaBase: mainArena.segment.lowerBound)
+        try analyzeTcache()
 
         for region in exploredHeap {
             guard 
@@ -173,6 +178,58 @@ public final class GlibcMallocAnalyzer {
 
         binBases.forEach { currentBinBase in
             findFreedChunks(storeTo: &self.binFreedChunks, arenaChunkBase: currentBinBase) { $0 != currentBinBase }
+        }
+    }
+
+    private func analyzeTcache() throws {
+        // FIXME: Here we want to load ALL threads TIDs and perform the same operation. Current analyzers will require modification
+
+        guard 
+            let unloadedSymbols = session.unloadedSymbols,
+            let tCacheSymbol = unloadedSymbols.first(where: { file, _ in GlibcAssurances.fileFromGlibc(file, unloadedSymbols: unloadedSymbols)})?.value.first(where: { $0.name == "tcache"}) 
+        else {
+            throw Error.couldNotLocateTcacheInDebugSymbols
+        }
+
+        let tCacheLocation = try TbssSymbolGlibcLdHeuristic(session: session, fileName: tCacheSymbol.file, tbssSymbolName: tCacheSymbol.name)
+        let tCacheTLSPtr = BoundRemoteMemory<swift_inspect_bridge__tcache_perthread_t>(pid: pid, load: tCacheLocation.loadedSymbolBase)
+
+        guard let tCachePtr = tCacheTLSPtr.buffer.tcache_ptr else {
+            return
+        }
+        let tCachePtrBase = UInt64(UInt(bitPattern: tCachePtr))
+        
+        let countsOffset = UInt64(MemoryLayout<tcache_perthread_struct>.offset(of: \.counts.0)!)
+        let countsSize: UInt64 = 2 // Size of uint16_t
+
+        let entryOffset = UInt64(MemoryLayout<tcache_perthread_struct>.offset(of: \.entries.0)!)
+        let entrySize: UInt64 = 8 // Size of pointer
+
+
+        for i in 0..<Cutils.TCACHE_MAX_BINS {
+            let i = UInt64(i)
+            let count = BoundRemoteMemory<Int16>(pid: pid, load: tCachePtrBase + countsOffset + i * countsSize)
+            if count.buffer == 0 {
+                continue // TODO: We could verify this as safety check
+            }
+
+            let firstChunkPtr = BoundRemoteMemory<swift_inspect_bridge__tcache_entry_t>(pid: pid, load: tCachePtrBase + entryOffset + i * entrySize)
+            guard let firstChunkBase = firstChunkPtr.buffer.next.flatMap({ UInt64(UInt(bitPattern: $0)) }) else {
+                error("Error: tcache " + String(format: "%016lx", tCachePtrBase) + " in index \(i) is null but count is greater than 0")
+                continue
+            }
+            iterateTcacheChunks(from: firstChunkBase)
+        }
+    }
+
+    private func iterateTcacheChunks(from baseChunk: UInt64) {
+        let chunkUserSpactOffset = UInt64(MemoryLayout<malloc_chunk>.offset(of: \.fd)!)
+
+        var currentBase: UInt64? = baseChunk
+        while let base = currentBase {
+            let chunk = BoundRemoteMemory<tcache_entry>(pid: pid, load: base)
+            currentBase = chunk.buffer.next.flatMap { UInt64(UInt(bitPattern: $0)) }
+            tcacheFreedChunks.insert( base - chunkUserSpactOffset )
         }
     }
 
