@@ -1,7 +1,7 @@
 import XCTest
 @testable import MemtoolCore
 
-let commons = 
+private let commons = 
 #"""
 #include <stdlib.h>
 #include <stdio.h>
@@ -17,7 +17,7 @@ int * cl(long long capacity) {
 
 """#
 
-let mallocNoFrees = commons +
+private let mallocNoFrees = commons +
 #"""
 int main(void) {
     int * a = cl(0x1);
@@ -36,7 +36,7 @@ int main(void) {
 
 """#
 
-let mallocInnerFrees = commons +
+private let mallocInnerFrees = commons +
 #"""
 int main(void) {
     int * a = cl(0x1);
