@@ -17,6 +17,14 @@ Without introduction of malloc hooks, it can not be guaranteed, that all malloc 
 
 Ordered TODO list:
  - Assuming `main_arena` is known, traverse all reachable malloc chunks in all arenas. [DONE]
+ - Tag chunks as freed [IN PROGRESS]
+   - Tag fastbin chunks [DONE]
+   - Tag bin chunks [DONE]
+   - Tag tcache chunks [IN PROGRESS]
+     - Read values from TLS [DONE]
+     - Read `tcache` [IN PROGRESS]
+     - Traverse all threads and all `tcache`s
+   - Introduce tests for malloc
  - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper).
  - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present.
  - Incorporate libMemtoolCore into `swift-inspect`
@@ -36,18 +44,23 @@ Run using `swift run`. Note, that in order to attach to a running process you ne
 Interactive mode usage:
 ```
 Available operations:
-  attach  - [PID] attempts to attach to a process.
-  detach  - Detached from attached process.
-  status  - [-m|-u|-l|-a] Prints current session to stdout. Use -m for map, -u for unloaded symbols and -l for loaded symbols, -a for glibc malloc analysis result.
-  map     - Parse /proc/pid/maps file.
-  symbol  - Requires maps. Loads all symbols for all object files in memory.
-  help    - Shows available commands on stdout.
-  exit    - Stops the execution
-  lookup  - [-e] "[text]" searches symbols matching text. Use -e if you want only exact matches.
-  peek    - [typename] [hexa pointer] Peeks ans bind a memory to any of following types: ["malloc_state", "malloc_chunk", "_heap_info"]
-  addr    - [hexa pointer] Prints all entities that contain given address with offsets.
-  analyze - Attempts to enumerate heap chubnks
-  chunk   - [hexa pointer] Attempts to load address as chunk and dumps it
+Available operations:
+  attach   - [PID] attempts to attach to a process.
+  detach   - Detached from attached process.
+  status   - [-m|-u|-l|-a] Prints current session to stdout. Use -m for map, -u for unloaded symbols and -l for loaded symbols, -a for glibc malloc analysis result.
+  map      - Parse /proc/pid/maps file.
+  symbol   - Requires maps. Loads all symbols for all object files in memory.
+  help     - Shows available commands on stdout.
+  exit     - Stops the execution
+  lookup   - [-e] "[text]" searches symbols matching text. Use -e if you want only exact matches.
+  peek     - [typename] [hexa pointer] Peeks ans bind a memory to any of following types: ["malloc_state", "malloc_chunk", "_heap_info", "tcbhead_t", "dtv_pointer", "link_map", "r_debug", "link_map_private"]
+  addr     - [hexa pointer] Prints all entities that contain given address with offsets.
+  analyze  - Attempts to enumerate heap chubnks
+  chunk    - [hexa pointer] Attempts to load address as chunk and dumps it
+  tcb      - Locates and prints Thread Control Block for traced thread
+  word     - [decimal count] [hex pointer] [-a] Dumps given amount of 64bit words; Use [-a] if you want the result in ASCII (`count` will load be 8*count bit instad of 64*count bit). (Note: data are not adjusted for Big Endian.)
+  tbss     - "symbol name" "file name" Attempts to locate tbss symbol in a file
+  errnoGot - "glibc file name" Attempts to parse `errno` location from disassembly in order to verify results of other heuristics.
 ```
 
 ## Note
@@ -74,52 +87,6 @@ Symbols:
 === 
 ? map
 ? symbol
-Warning: Symbol failed to match regex: /usr/lib/x86_64-linux-gnu/libgcc_s.so.1:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: no symbols
-Warning: Symbol failed to match regex: /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: no symbols
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libicuucswift.so.65.1:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libicui18nswift.so.65.1:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libFoundation.so:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libdispatch.so:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libswiftSwiftOnoneSupport.so:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/lib/debug/.build-id/29/2e105c0bb3ee8e8f5b917f8af764373d206659.debug:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: 0000000000000000 l    df *ABS*	0000000000000000 
-Warning: Symbol failed to match regex: /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: 0000000000000000 l    df *ABS*	0000000000000000 
-Warning: Symbol failed to match regex: /usr/lib/debug/.build-id/69/c0f56e574b311a0d256e8ede640fab11c1407d.debug:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: 0000000000000000 l    df *ABS*	0000000000000000 
-Warning: Symbol failed to match regex: /usr/lib/x86_64-linux-gnu/libm.so.6:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: 0000000000000000 l    df *ABS*	0000000000000000 
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libBlocksRuntime.so:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libswiftGlibc.so:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libswiftCore.so:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libswift_Concurrency.so:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/local/bin/swift/usr/lib/swift/linux/libswiftDispatch.so:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /home/mikolas/Developer/ptrace/thread:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: /usr/lib/debug/.build-id/d1/704d25fbbb72fa95d517b883131828c0883fe9.debug:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: 0000000000000000 l    df *ABS*	0000000000000000 
-Warning: Symbol failed to match regex: /usr/lib/x86_64-linux-gnu/libc.so.6:     file format elf64-x86-64
-Warning: Symbol failed to match regex: SYMBOL TABLE:
-Warning: Symbol failed to match regex: 0000000000000000 l    df *ABS*	0000000000000000 
 ? lookup "main_arena"
 Unloaded symbols: 
 UnloadedSymbolInfo(name: main_arena, file: /usr/lib/x86_64-linux-gnu/libc.so.6, location: 00000000001f6c60, flags: l     O, segment: .data, size: 0000000000000898)
