@@ -15,4 +15,7 @@ struct swift_inspect_bridge__tcache_entry_t {
     struct tcache_entry * _Nullable next;
 };
 
+void * _Nullable swift_inspect_bridge__macro_PROTECT_PTR(const void * _Nonnull pos, const void * _Nonnull ptr);
+void * _Nullable swift_inspect_bridge__macro_REVEAL_PTR(const void * _Nonnull ptr, const void * _Nonnull ptr_addr);
+
 #endif /* HEAP_SWIFT_BRIDGE_H */

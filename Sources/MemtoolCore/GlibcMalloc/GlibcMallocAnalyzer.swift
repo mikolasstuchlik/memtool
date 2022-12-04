@@ -224,15 +224,23 @@ public final class GlibcMallocAnalyzer {
 
     private func iterateTcacheChunks(from baseChunk: UInt64, count: UInt16) {
         let chunkUserSpactOffset = UInt64(MemoryLayout<malloc_chunk>.offset(of: \.fd)!)
+        let nextOffset = UInt64(MemoryLayout<tcache_entry>.offset(of: \.next)!)
 
         var currentBase: UInt64? = baseChunk
-        for i in 0..<count {
+        for i in 0..<(count + 1) {
+            guard i < count else {
+                error("Error: tcache entry " + String(format: "%016lx", baseChunk) + " exceeded the expected number of iterations!")
+                return
+            }
             guard let base = currentBase else {
                 error("Error: tcache entry " + String(format: "%016lx", baseChunk) + " ended iterating after \(i) steps, expected \(count) steps")
                 return
             }
             let chunk = BoundRemoteMemory<tcache_entry>(pid: pid, load: base)
-            currentBase = chunk.buffer.next.flatMap { UInt64(UInt(bitPattern: $0)) }
+            let remoteMemoryPseudoPointer = UnsafeRawPointer(bitPattern: UInt(chunk.segment.lowerBound + nextOffset))!
+            let nextPointer = swift_inspect_bridge__macro_REVEAL_PTR(chunk.buffer.next, remoteMemoryPseudoPointer)
+
+            currentBase = nextPointer.flatMap { UInt64(UInt(bitPattern: $0)) }
             tcacheFreedChunks.insert( base - chunkUserSpactOffset )
         }
     }

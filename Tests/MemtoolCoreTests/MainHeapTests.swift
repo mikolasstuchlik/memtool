@@ -10,7 +10,15 @@ private let commons =
 int * cl(long long capacity) {
     int * ptr = malloc(capacity * sizeof(int));
     for(long long i = 0; i < capacity; i++) {
-        memcpy(&ptr[i], "ABCDEFHIJKLMN", sizeof(int));
+        memcpy(&ptr[i], "ABCD", sizeof(int));
+    }
+    return ptr;
+}
+
+int * cl2(long long capacity) {
+    int * ptr = malloc(capacity * sizeof(int));
+    for(long long i = 0; i < capacity; i++) {
+        memcpy(&ptr[i], "HIJK", sizeof(int));
     }
     return ptr;
 }
@@ -39,9 +47,9 @@ int main(void) {
 private let mallocInnerFrees = commons +
 #"""
 int main(void) {
-    int * a = cl(0x1);
-    int * b = cl(0x102);
-    int * c = cl(0x1);
+    int * a = cl2(0x12);
+    int * b = cl2(0x102);
+    int * c = cl2(0x12);
     int * d = cl(0x12);
     int * e = cl(0x1);
     int * f = cl(0x10);
@@ -104,7 +112,7 @@ final class MainHeapTests: XCTestCase {
         XCTAssertTrue(stdoutChunk.content.asAsciiString.hasPrefix(output))
     }
 
-    func testMallocWithFrees() throws {
+    func testMallocWithTCacheFrees() throws {
         let program = try AdhocProgram(
             name: String(describing: Self.self) + #function, 
             code: mallocInnerFrees
@@ -126,8 +134,6 @@ final class MainHeapTests: XCTestCase {
         let analyzer = try GlibcMallocAnalyzer(session: session)
         try analyzer.analyze()
 
-        print(analyzer.mainArena.buffer)
-
         // First malloc chunk is unknown chunk allocated from reasons unknown to me
         // Next 6 malloc chunks are allocated by the program
         // Last (8th) malloc chunk is probably some kind of buffer for stdout.
@@ -139,25 +145,14 @@ final class MainHeapTests: XCTestCase {
             XCTAssertEqual(chunk.content.asAsciiString, asciiContent)
         }
 
-        print( 
-            analyzer.exploredHeap.map {
-                var str = ""
-                str += "\($0)"
-                str += Chunk(pid: session.pid, baseAddress: $0.range.lowerBound).content.asAsciiString
-                return str
-            }.joined(separator: "\n")
-        )
-
-        // FIXME: Test not passing, chunks in tcache do not reflext expectations
-        //XCTAssertEqual(analyzer.exploredHeap[1].properties.rebound, .mallocChunk(.heapTCache))
-        //XCTAssertEqual(analyzer.exploredHeap[2].properties.rebound, .mallocChunk(.heapTCache))
-        //XCTAssertEqual(analyzer.exploredHeap[3].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[1].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[2].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[3].properties.rebound, .mallocChunk(.heapTCache))
         checkChunk(index: 4, asciiContent: String(repeating: "ABCD", count: 0x12) + #""#)
         checkChunk(index: 5, asciiContent: String(repeating: "ABCD", count: 0x1) + #"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"#)
         checkChunk(index: 6, asciiContent: String(repeating: "ABCD", count: 0x10) + #"\0\0\0\0\0\0\0\0"#)
 
         let stdoutChunk = Chunk(pid: program.runningProgram.processIdentifier, baseAddress: analyzer.exploredHeap[7].range.lowerBound)
         XCTAssertTrue(stdoutChunk.content.asAsciiString.hasPrefix(output))
-
     }
 }
