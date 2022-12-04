@@ -208,7 +208,7 @@ public final class GlibcMallocAnalyzer {
 
         for i in 0..<Cutils.TCACHE_MAX_BINS {
             let i = UInt64(i)
-            let count = BoundRemoteMemory<Int16>(pid: pid, load: tCachePtrBase + countsOffset + i * countsSize)
+            let count = BoundRemoteMemory<UInt16>(pid: pid, load: tCachePtrBase + countsOffset + i * countsSize)
             if count.buffer == 0 {
                 continue // TODO: We could verify this as safety check
             }
@@ -218,15 +218,19 @@ public final class GlibcMallocAnalyzer {
                 error("Error: tcache " + String(format: "%016lx", tCachePtrBase) + " in index \(i) is null but count is greater than 0")
                 continue
             }
-            iterateTcacheChunks(from: firstChunkBase)
+            iterateTcacheChunks(from: firstChunkBase, count: count.buffer)
         }
     }
 
-    private func iterateTcacheChunks(from baseChunk: UInt64) {
+    private func iterateTcacheChunks(from baseChunk: UInt64, count: UInt16) {
         let chunkUserSpactOffset = UInt64(MemoryLayout<malloc_chunk>.offset(of: \.fd)!)
 
         var currentBase: UInt64? = baseChunk
-        while let base = currentBase {
+        for i in 0..<count {
+            guard let base = currentBase else {
+                error("Error: tcache entry " + String(format: "%016lx", baseChunk) + " ended iterating after \(i) steps, expected \(count) steps")
+                return
+            }
             let chunk = BoundRemoteMemory<tcache_entry>(pid: pid, load: base)
             currentBase = chunk.buffer.next.flatMap { UInt64(UInt(bitPattern: $0)) }
             tcacheFreedChunks.insert( base - chunkUserSpactOffset )
@@ -321,7 +325,7 @@ public final class GlibcMallocAnalyzer {
             if chunk.buffer.isPreviousInUse == false, chunks.count > 0 {
                 if 
                     case let .mallocChunk(state) = chunks[chunks.count - 1].properties.rebound, 
-                    ![GlibcMallocChunkState.heapFastBin, .heapBin].contains(state)
+                    ![GlibcMallocChunkState.heapFastBin, .heapBin, .heapTCache].contains(state)
                 {
                     error("Error: Chunk \(chunks[chunks.count - 1].range) is before chunk marked as `previous is not active` and has state \(state)")
                     chunks[chunks.count - 1].properties.rebound = .mallocChunk(.heapNoBinFree)
@@ -334,7 +338,9 @@ public final class GlibcMallocAnalyzer {
             }
 
             var chunkState: GlibcMallocChunkState
-            if binFreedChunks.contains(chunkRange.lowerBound) {
+            if tcacheFreedChunks.contains(chunkRange.lowerBound) {
+                chunkState = .heapTCache
+            }else if binFreedChunks.contains(chunkRange.lowerBound) {
                 chunkState = .heapBin
             } else if fastbinFreedChunks.contains(chunkRange.lowerBound) {
                 chunkState = .heapFastBin
