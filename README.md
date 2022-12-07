@@ -22,7 +22,8 @@ Ordered TODO list:
    - Tag bin chunks [DONE]
    - Tag tcache chunks [IN PROGRESS]
      - Read values from TLS [DONE]
-     - Read `tcache` [IN PROGRESS]
+     - Read `tcache` [DONE]
+     - Refactor workflow with session to support threads and make it more fluent [IN PROGRESS]
      - Traverse all threads and all `tcache`s
    - Introduce tests for malloc
  - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper).
@@ -43,7 +44,7 @@ Run using `swift run`. Note, that in order to attach to a running process you ne
 
 Interactive mode usage:
 ```
-Available operations:
+? help
 Available operations:
   attach   - [PID] attempts to attach to a process.
   detach   - Detached from attached process.
@@ -61,6 +62,7 @@ Available operations:
   word     - [decimal count] [hex pointer] [-a] Dumps given amount of 64bit words; Use [-a] if you want the result in ASCII (`count` will load be 8*count bit instad of 64*count bit). (Note: data are not adjusted for Big Endian.)
   tbss     - "symbol name" "file name" Attempts to locate tbss symbol in a file
   errnoGot - "glibc file name" Attempts to parse `errno` location from disassembly in order to verify results of other heuristics.
+  reveal   - [hexa pointer] Applies macro `REVEAL_PTR`
 ```
 
 ## Note
