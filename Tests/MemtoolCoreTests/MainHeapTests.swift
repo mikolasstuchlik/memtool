@@ -67,13 +67,8 @@ int main(void) {
 
 """#
 
-private let mallocManySmallFrees = commons +
+private let freesMain =
 #"""
-#define COUNT 10
-#define FREE 9
-#define STEP 1
-#define SIZE 0x12
-
 int main(void) {
     void * ptrs[COUNT];
 
@@ -90,6 +85,15 @@ int main(void) {
 }     
 
 """#
+
+private let mallocManySmallFrees = commons +
+#"""
+#define COUNT 10
+#define FREE 9
+#define STEP 1
+#define SIZE 0x12
+
+"""# + freesMain
 
 private let mallocManyFrees = commons +
 #"""
@@ -98,22 +102,7 @@ private let mallocManyFrees = commons +
 #define STEP 2
 #define SIZE 0x250
 
-int main(void) {
-    void * ptrs[COUNT];
-
-    for(int i = 0; i < COUNT; i++) {
-        ptrs[i] = cl(SIZE);
-    }
-
-    for(int i = 0; i < FREE; i = i + STEP) {
-        free(ptrs[i]);
-    }
-
-    while(1) {}
-    return 0;
-}     
-
-"""#
+"""# + freesMain
 
 final class MainHeapTests: XCTestCase {
     func testMallocNoFrees() throws {
