@@ -67,12 +67,36 @@ int main(void) {
 
 """#
 
+private let mallocManySmallFrees = commons +
+#"""
+#define COUNT 10
+#define FREE 9
+#define STEP 1
+#define SIZE 0x12
+
+int main(void) {
+    void * ptrs[COUNT];
+
+    for(int i = 0; i < COUNT; i++) {
+        ptrs[i] = cl(SIZE);
+    }
+
+    for(int i = 0; i < FREE; i = i + STEP) {
+        free(ptrs[i]);
+    }
+
+    while(1) {}
+    return 0;
+}     
+
+"""#
+
 private let mallocManyFrees = commons +
 #"""
-#define COUNT 11
+#define COUNT 10
 #define FREE 10
-#define STEP 1
-#define SIZE 0x1
+#define STEP 2
+#define SIZE 0x250
 
 int main(void) {
     void * ptrs[COUNT];
@@ -180,10 +204,10 @@ final class MainHeapTests: XCTestCase {
         XCTAssertTrue(stdoutChunk.content.asAsciiString.hasPrefix(output))
     }
 
-    func testMallocFastbinFreesFrees() throws {
+    func testMallocFastbinFrees() throws {
         let program = try AdhocProgram(
             name: String(describing: Self.self) + #function, 
-            code: mallocManyFrees
+            code: mallocManySmallFrees
         )
 
         sleep(3)
@@ -199,10 +223,19 @@ final class MainHeapTests: XCTestCase {
         let analyzer = try GlibcMallocAnalyzer(session: session)
         try analyzer.analyze()
 
+        XCTAssertEqual(analyzer.exploredHeap[1].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[2].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[3].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[4].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[5].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[6].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[7].properties.rebound, .mallocChunk(.heapTCache))
+        XCTAssertEqual(analyzer.exploredHeap[8].properties.rebound, .mallocChunk(.heapFastBin))
+        XCTAssertEqual(analyzer.exploredHeap[9].properties.rebound, .mallocChunk(.heapFastBin))
+        XCTAssertEqual(analyzer.exploredHeap[10].properties.rebound, .mallocChunk(.heapActive))
     }
 
-
-    func testMallocBinFreesFrees() throws {
+    func testMallocBinFrees() throws {
         let program = try AdhocProgram(
             name: String(describing: Self.self) + #function, 
             code: mallocManyFrees
@@ -221,5 +254,15 @@ final class MainHeapTests: XCTestCase {
         let analyzer = try GlibcMallocAnalyzer(session: session)
         try analyzer.analyze()
 
+        XCTAssertEqual(analyzer.exploredHeap[1].properties.rebound, .mallocChunk(.heapBin))
+        XCTAssertEqual(analyzer.exploredHeap[2].properties.rebound, .mallocChunk(.heapActive))
+        XCTAssertEqual(analyzer.exploredHeap[3].properties.rebound, .mallocChunk(.heapBin))
+        XCTAssertEqual(analyzer.exploredHeap[4].properties.rebound, .mallocChunk(.heapActive))
+        XCTAssertEqual(analyzer.exploredHeap[5].properties.rebound, .mallocChunk(.heapBin))
+        XCTAssertEqual(analyzer.exploredHeap[6].properties.rebound, .mallocChunk(.heapActive))
+        XCTAssertEqual(analyzer.exploredHeap[7].properties.rebound, .mallocChunk(.heapBin))
+        XCTAssertEqual(analyzer.exploredHeap[8].properties.rebound, .mallocChunk(.heapActive))
+        XCTAssertEqual(analyzer.exploredHeap[9].properties.rebound, .mallocChunk(.heapBin))
+        XCTAssertEqual(analyzer.exploredHeap[10].properties.rebound, .mallocChunk(.heapActive))
     }
 }

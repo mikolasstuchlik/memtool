@@ -17,6 +17,8 @@ final class AssurancesTests: XCTestCase {
             code: emptyProgram
         )
 
+        sleep(1)
+
         let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
         session.loadMap()
         session.loadSymbols()

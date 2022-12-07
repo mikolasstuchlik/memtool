@@ -136,7 +136,7 @@ public final class GlibcMallocAnalyzer {
 
     private func analyzeFreed() throws {
         analyzeFastBins(arenaBase: mainArena.segment.lowerBound)
-        //analyzeBins(arenaBase: mainArena.segment.lowerBound)
+        analyzeBins(arenaBase: mainArena.segment.lowerBound)
         try analyzeTcache()
 
         for region in exploredHeap {
@@ -157,14 +157,14 @@ public final class GlibcMallocAnalyzer {
         let fdOffset = MemoryLayout<malloc_chunk>.offset(of: \.fd)!
         let fastBinsCount = macro_NFASTBINS()
 
-        let fastBinFirstChunkBases = (0..<fastBinsCount).map { index in
+        let fastBinFirstChunkBases = (0..<fastBinsCount).compactMap { index in
             let base = arenaBase + UInt64(firstOffset - fdOffset + index * fastbinPtrSize)
             let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.pid, load: base)
             return chunk.buffer.fd.flatMap { UInt64(UInt(bitPattern: $0)) }
         }
 
         fastBinFirstChunkBases.forEach { currentFastbin in
-            var nextChunk = currentFastbin
+            var nextChunk: UInt64? = currentFastbin
 
             while let current = nextChunk {
                 self.fastbinFreedChunks.insert(current)
@@ -202,8 +202,7 @@ public final class GlibcMallocAnalyzer {
             while let current = nextChunk, current != item.breaker {
                 self.binFreedChunks.insert(current)
                 let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.pid, load: current)
-                let fd = chunk.deobfuscate(pointer: \.fd).flatMap { UInt64(UInt(bitPattern: $0)) }
-                nextChunk = fd
+                nextChunk = chunk.buffer.fd.flatMap { UInt64(UInt(bitPattern: $0)) }
             }
         }
     }
