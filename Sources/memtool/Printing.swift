@@ -45,7 +45,7 @@ extension LoadedSymbolInfo: CLIPrint {
     }
 }
 
-extension Session: CLIPrint {
+extension ProcessSession: CLIPrint {
     var cliPrint: String {
 """
 === Session [\(pid)]
@@ -57,6 +57,9 @@ Unloaded Symbols:
 
 Symbols:
 \(symbols?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
+
+Threads:
+\(threadSessions.map(\.tid).map(String.init(_:)).joined(separator: " ")))
 === 
 """
     }

@@ -57,6 +57,7 @@ final class AdhocProgram {
 
         process.executableURL = URL(fileURLWithPath: "/bin/env")
         process.standardOutput = aStdout
+        process.standardError = aStderr
         process.arguments = ["bash", "-c", line]
 
         try! process.run()

@@ -2,14 +2,25 @@ import Foundation
 import Cutils
 import Glibc
 
+public protocol Session {
+    var ptraceId: Int32 { get }
 
-public final class Session {
+    var map: [MapRegion]? { get set }
+    var executableFileBasePoints: [String: UInt]? { get set }
+    var unloadedSymbols: [String: [UnloadedSymbolInfo]]? { get set }
+    var symbols: [SymbolRegion]? { set get }
+}
+
+public final class ProcessSession: Session {
+    public var ptraceId: Int32 { pid }
+
     public let pid: Int32
 
     public var map: [MapRegion]?
     public var executableFileBasePoints: [String: UInt]?
     public var unloadedSymbols: [String: [UnloadedSymbolInfo]]?
     public var symbols: [SymbolRegion]?
+    public var threadSessions: [ThreadSession] = []
 
     public init(pid: Int32) {
         swift_inspect_bridge__ptrace_attach(pid)
@@ -19,9 +30,7 @@ public final class Session {
     deinit {
         swift_inspect_bridge__ptrace_syscall(pid)
     }
-}
 
-extension Session {
     public func loadMap() {
         map = Map.getMap(for: pid)
         executableFileBasePoints = [:]
@@ -44,9 +53,7 @@ extension Session {
             return false
         }
     }
-}
 
-extension Session {
     public static let sectionsToResolve: Set<KnownSymbolSection> = [.bss, .data, .data1, .rodata, .rodata1, .text]
     public func loadSymbols() {
         guard let maps = executableFileBasePoints else { return }
@@ -66,13 +73,69 @@ extension Session {
             for symbol in unloaded {
                 guard 
                     case let .known(known) = symbol.segment, 
-                    Session.sectionsToResolve.contains(known) 
+                    ProcessSession.sectionsToResolve.contains(known) 
                 else {
                     continue
                 }
                 SymbolRegion(unloadedSymbol: symbol, executableFileBasePoints: maps).flatMap { symbols?.append($0) }
             }
         }
+    }
 
+    public func loadThreads() {
+        let threads = ThreadLoader(pid: pid)
+        threadSessions = threads.threads.map { ThreadSession(tid: $0, owner: self) }
+    }
+}
+
+public final class ThreadSession: Session {
+    public var ptraceId: Int32 { tid }
+    public let tid: Int32
+    public unowned let owner: ProcessSession
+
+    public var map: [MapRegion]? {
+        get {
+            owner.map
+        }
+        set {
+            owner.map = newValue
+        }
+    }
+
+    public var executableFileBasePoints: [String : UInt]? {
+        get {
+            owner.executableFileBasePoints
+        }
+        set {
+            owner.executableFileBasePoints = newValue
+        }
+    }
+
+    public var unloadedSymbols: [String : [UnloadedSymbolInfo]]? {
+        get {
+            owner.unloadedSymbols
+        }
+        set {
+            owner.unloadedSymbols = newValue
+        }
+    }
+
+    public var symbols: [SymbolRegion]? {
+        get {
+            owner.symbols
+        }
+        set {
+            owner.symbols = newValue
+        }
+    }
+
+    public init(tid: Int32, owner: ProcessSession) {
+        swift_inspect_bridge__ptrace_attach(tid)
+        self.owner = owner
+        self.tid = tid
+    }
+
+    deinit {
+        swift_inspect_bridge__ptrace_syscall(tid)
     }
 }

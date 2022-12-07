@@ -79,7 +79,7 @@ let attachOperation = Operation(keyword: "attach", help: "[PID] attempts to atta
         return true
     }
 
-    ctx.session = Session(pid: pid)
+    ctx.session = ProcessSession(pid: pid)
 
     return true
 }

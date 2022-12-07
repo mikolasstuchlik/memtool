@@ -1,16 +1,3 @@
-public enum GlibcMallocAnalysisFlag {
-    case mainHeap
-    case threadHeap
-    case mmappedChunkCandidate
-    case sharedObjectBss
-    case notYetAnalyzed
-}
-
-public struct GlibcMallocMapAnalysis {
-    public var flag: GlibcMallocAnalysisFlag
-    public var mapRegion: MapRegion
-}
-
 public enum GlibcMallocChunkState: Equatable {
     case mmapped, heapActive, heapNoBinFree, topChunk, heapBin, heapFastBin, heapTCache
 

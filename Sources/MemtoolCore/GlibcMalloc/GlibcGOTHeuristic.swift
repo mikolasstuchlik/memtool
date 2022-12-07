@@ -121,7 +121,7 @@ public final class TbssSymbolGlibcLdHeuristic {
         case symbolNotInReadableSpace
     }
 
-    public let pid: Int32
+    public let ptraceId: Int32
     public let symbolName: String
     public let fileName: String
 
@@ -134,7 +134,7 @@ public final class TbssSymbolGlibcLdHeuristic {
     public let loadedSymbolBase: UInt
 
     public init(session: Session, fileName: String, tbssSymbolName: String) throws {
-        self.pid = session.pid
+        self.ptraceId = session.ptraceId
         self.symbolName = tbssSymbolName
         self.fileName = fileName
 
@@ -160,36 +160,36 @@ public final class TbssSymbolGlibcLdHeuristic {
         self.rDebug = rDebugLocation
 
         // Iterate link items in r_debug and locate item for this file
-        guard let linkItem = TbssSymbolGlibcLdHeuristic.iterateRDebug(pid: pid, symbol: rDebug, file: fileName) else {
+        guard let linkItem = TbssSymbolGlibcLdHeuristic.iterateRDebug(pid: ptraceId, symbol: rDebug, file: fileName) else {
             throw Error.couldNotLocateLinkItem
         }
 
         // Rebound to link_item_private. Following code braks Glibc guarentees and needs to be validated!
-        let privateLinkItem = BoundRemoteMemory<link_map_private>(pid: pid, load: linkItem.segment.lowerBound)
+        let privateLinkItem = BoundRemoteMemory<link_map_private>(pid: ptraceId, load: linkItem.segment.lowerBound)
         self.privateLinkItem = privateLinkItem
         let index = privateLinkItem.buffer.l_tls_modid
 
         // Get FS register
-        let fsBase = UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE))
+        let fsBase = UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.ptraceId, FS_BASE))
         self.fsBase = fsBase
         guard map.contains(where: { $0.range.contains(fsBase) && $0.properties.flags.contains([.read, .write])}) == true else {
             throw Error.fsBaseNotInReadableSpace
         }
 
-        let head = BoundRemoteMemory<tcbhead_t>(pid: session.pid, load: fsBase)
+        let head = BoundRemoteMemory<tcbhead_t>(pid: session.ptraceId, load: fsBase)
         guard head.buffer.dtv != nil else {
             throw Error.dtvNotInitialized
         }
         let dtvBase = UInt(bitPattern: head.buffer.dtv)
         self.dtvBase = dtvBase
         let dtvSizeBase = dtvBase - UInt(MemoryLayout<dtv_t>.size)
-        let dtvCount = BoundRemoteMemory<dtv_t>(pid: pid, load: dtvSizeBase)
+        let dtvCount = BoundRemoteMemory<dtv_t>(pid: ptraceId, load: dtvSizeBase)
         guard dtvCount.buffer.counter >= index else {
             throw Error.dtvTooSmall
         }
 
         let indexDtvBase = dtvBase + UInt(index * MemoryLayout<dtv_t>.size)
-        self.indexDtv = BoundRemoteMemory<dtv_t>(pid: pid, load: indexDtvBase)
+        self.indexDtv = BoundRemoteMemory<dtv_t>(pid: ptraceId, load: indexDtvBase)
         let loadedSymbolBase = UInt(bitPattern: indexDtv.buffer.pointer.val) + symbolReference.location
         self.loadedSymbolBase = loadedSymbolBase
 
@@ -282,7 +282,7 @@ public final class GlibcErrnoAsmHeuristic {
     public let errnoLocation: UInt
 
     public init(session: Session, glibcPath: String) throws {
-        self.pid = session.pid
+        self.pid = session.ptraceId
         self.glibcPath = glibcPath
 
         // Assert, that everything is initialized
@@ -359,7 +359,7 @@ public final class GlibcErrnoAsmHeuristic {
         let fsOffsetToErrno = BoundRemoteMemory<UInt>(pid: pid, load: gotOffsetLocation)
         
         // Get FS register
-        let fsBase = UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE))
+        let fsBase = UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.ptraceId, FS_BASE))
 
         // This MUST overflow. errno should be located on lower address than FS
         let gotAddition = fsBase.addingReportingOverflow(fsOffsetToErrno.buffer)

@@ -116,7 +116,7 @@ final class MainHeapTests: XCTestCase {
         let pointers = output.components(separatedBy: " ").dropLast().compactMap { UInt($0, radix: 16)}
         XCTAssertEqual(pointers.count, 6)
 
-        let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
+        let session = MemtoolCore.ProcessSession(pid: program.runningProgram.processIdentifier)
         session.loadMap()
         session.loadSymbols()
 
@@ -160,7 +160,7 @@ final class MainHeapTests: XCTestCase {
         let pointers = output.components(separatedBy: " ").dropLast().compactMap { UInt($0, radix: 16)}
         XCTAssertEqual(pointers.count, 6)
 
-        let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
+        let session = MemtoolCore.ProcessSession(pid: program.runningProgram.processIdentifier)
         session.loadMap()
         session.loadSymbols()
 
@@ -201,7 +201,7 @@ final class MainHeapTests: XCTestCase {
 
         sleep(3)
 
-        let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
+        let session = MemtoolCore.ProcessSession(pid: program.runningProgram.processIdentifier)
         session.loadMap()
         session.loadSymbols()
 
@@ -232,7 +232,7 @@ final class MainHeapTests: XCTestCase {
 
         sleep(3)
 
-        let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
+        let session = MemtoolCore.ProcessSession(pid: program.runningProgram.processIdentifier)
         session.loadMap()
         session.loadSymbols()
 

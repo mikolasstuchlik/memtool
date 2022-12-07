@@ -21,7 +21,7 @@ final class ThreadLocalStorageTests: XCTestCase {
 
         sleep(1)
 
-        let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
+        let session = MemtoolCore.ProcessSession(pid: program.runningProgram.processIdentifier)
         session.loadMap()
         session.loadSymbols()
 
@@ -45,7 +45,7 @@ final class ThreadLocalStorageTests: XCTestCase {
 
         sleep(1)
 
-        let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
+        let session = MemtoolCore.ProcessSession(pid: program.runningProgram.processIdentifier)
         session.loadMap()
         session.loadSymbols()
 
@@ -69,7 +69,7 @@ final class ThreadLocalStorageTests: XCTestCase {
 
         sleep(1)
 
-        let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
+        let session = MemtoolCore.ProcessSession(pid: program.runningProgram.processIdentifier)
         session.loadMap()
         session.loadSymbols()
 

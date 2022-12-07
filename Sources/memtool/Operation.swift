@@ -2,7 +2,7 @@ import MemtoolCore
 
 struct Context {
     let operations: [Operation]
-    var session: Session?
+    var session: ProcessSession?
     var glibcMallocExplorer: GlibcMallocAnalyzer?
     var shouldStop: Bool
 
