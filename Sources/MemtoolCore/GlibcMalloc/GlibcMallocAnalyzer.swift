@@ -185,36 +185,25 @@ public final class GlibcMallocAnalyzer {
         let fdOffset = MemoryLayout<malloc_chunk>.offset(of: \.fd)!
         let binsTotal = macro_NBINS_TOTAL() / 2
 
-        let binBases = (0..<binsTotal).map { index in
-            UInt64(firstOffset - fdOffset + index * binPtrSize) + arenaBase
+        let binFirstChunkBases: [(breaker: UInt64, base: UInt64)] = (0..<binsTotal).compactMap { index -> (UInt64, UInt64)? in
+            let base = UInt64(firstOffset - fdOffset + index * binPtrSize) + arenaBase
+            let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.pid, load: base)
+            guard 
+                let fd = chunk.buffer.fd.flatMap({ UInt64(UInt(bitPattern: $0)) }),
+                fd != base
+            else {
+                return nil
+            }
+            return (breaker: base, base: fd)
         }
 
-        binBases.forEach { currentBinBase in
-            var firstIteration = true
-            var nextChunk: UInt64? = currentBinBase
-            let enterNext: (BoundRemoteMemory<malloc_chunk>) -> Bool = { chunk in
-                if firstIteration {
-                    firstIteration = false
-                    return chunk.buffer.fd.flatMap { UInt64(UInt(bitPattern: $0)) } != currentBinBase
-                }
-                return chunk.deobfuscate(pointer: \.fd).flatMap { UInt64(UInt(bitPattern: $0)) } != currentBinBase 
-            }
-        // Insert any iterated chunk to buffer. Ignore the first chunk, since it is arena chunk. If fd is nil, abort.
-            while let current = nextChunk {
+        binFirstChunkBases.forEach { item in
+            var nextChunk: UInt64? = item.base
+            while let current = nextChunk, current != item.breaker {
+                self.binFreedChunks.insert(current)
                 let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.pid, load: current)
-                guard enterNext(chunk) else {
-                    return
-                }
-                nextChunk = chunk.deobfuscate(pointer: \.fd).flatMap { UInt64(UInt(bitPattern: $0)) }
-
-                guard current != nextChunk else {
-                    error("Error: Endless cycle in chunk \(String(format: "%016lx", current)) while iterating bin  \(String(format: "%016lx", currentBinBase))")
-                    return
-                }
-
-                if let nextChunk = nextChunk {
-                    self.binFreedChunks.insert(nextChunk)
-                }
+                let fd = chunk.deobfuscate(pointer: \.fd).flatMap { UInt64(UInt(bitPattern: $0)) }
+                nextChunk = fd
             }
         }
     }

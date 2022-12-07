@@ -180,7 +180,29 @@ final class MainHeapTests: XCTestCase {
         XCTAssertTrue(stdoutChunk.content.asAsciiString.hasPrefix(output))
     }
 
-    func testMallocFrees() throws {
+    func testMallocFastbinFreesFrees() throws {
+        let program = try AdhocProgram(
+            name: String(describing: Self.self) + #function, 
+            code: mallocManyFrees
+        )
+
+        sleep(3)
+
+        let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
+        session.loadMap()
+        session.loadSymbols()
+
+        XCTAssertNotNil(session.map)
+        XCTAssertNotNil(session.unloadedSymbols)
+        XCTAssertNotNil(session.symbols)
+
+        let analyzer = try GlibcMallocAnalyzer(session: session)
+        try analyzer.analyze()
+
+    }
+
+
+    func testMallocBinFreesFrees() throws {
         let program = try AdhocProgram(
             name: String(describing: Self.self) + #function, 
             code: mallocManyFrees
