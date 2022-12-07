@@ -23,7 +23,7 @@ Ordered TODO list:
    - Tag tcache chunks [IN PROGRESS]
      - Read values from TLS [DONE]
      - Read `tcache` [DONE]
-     - Move from UInt64 to UInt
+     - Move from UInt64 to UInt [DONE]
      - Refactor workflow with session to support threads and make it more fluent [IN PROGRESS]
      - Traverse all threads and all `tcache`s
    - Introduce tests for malloc
