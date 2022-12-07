@@ -36,7 +36,8 @@ let operations: [Operation] = [
     tcbOperation,
     wordOperation,
     tbssSymbolOperation,
-    errnoGotOperation
+    errnoGotOperation,
+    revealOperation
 ]
 
 let helpOperation = Operation(keyword: "help", help: "Shows available commands on stdout.") { input, ctx -> Bool in
@@ -503,6 +504,31 @@ let errnoGotOperation = Operation(keyword: "errnoGot", help: "\"glibc file name\
     } catch {
         MemtoolCore.error("Error: Failed to locate tbss symbol: \(error)")
     }
+
+    return true
+}
+
+let revealOperation = Operation(keyword: "reveal", help: "[hexa pointer] Applies macro `REVEAL_PTR`") { input, ctx -> Bool in
+    guard input.hasPrefix("reveal") else {
+        return false
+    }
+    let payload = input.trimmingPrefix("reveal").trimmingCharacters(in: .whitespaces)
+
+    guard let base = UInt64(payload.trimmingPrefix("0x"), radix: 16) else {
+        return false
+    }
+
+    guard let session = ctx.session else {
+        MemtoolCore.error("Error: Not attached to a session!")
+        return true
+    }
+
+    let content = BoundRemoteMemory<UnsafeRawPointer>(pid: session.pid, load: base)
+    let pseudoPointer = UnsafeRawPointer(bitPattern: UInt(base))!
+    let result = swift_inspect_bridge__macro_REVEAL_PTR(content.buffer, pseudoPointer)
+
+    print("Content: \(content), pointer: \(pseudoPointer)")
+    print(result ?? "none")
 
     return true
 }

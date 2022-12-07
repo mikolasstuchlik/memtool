@@ -67,6 +67,30 @@ int main(void) {
 
 """#
 
+private let mallocManyFrees = commons +
+#"""
+#define COUNT 11
+#define FREE 10
+#define STEP 1
+#define SIZE 0x1
+
+int main(void) {
+    void * ptrs[COUNT];
+
+    for(int i = 0; i < COUNT; i++) {
+        ptrs[i] = cl(SIZE);
+    }
+
+    for(int i = 0; i < FREE; i = i + STEP) {
+        free(ptrs[i]);
+    }
+
+    while(1) {}
+    return 0;
+}     
+
+"""#
+
 final class MainHeapTests: XCTestCase {
     func testMallocNoFrees() throws {
         let program = try AdhocProgram(
@@ -154,5 +178,26 @@ final class MainHeapTests: XCTestCase {
 
         let stdoutChunk = Chunk(pid: program.runningProgram.processIdentifier, baseAddress: analyzer.exploredHeap[7].range.lowerBound)
         XCTAssertTrue(stdoutChunk.content.asAsciiString.hasPrefix(output))
+    }
+
+    func testMallocFrees() throws {
+        let program = try AdhocProgram(
+            name: String(describing: Self.self) + #function, 
+            code: mallocManyFrees
+        )
+
+        sleep(3)
+
+        let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
+        session.loadMap()
+        session.loadSymbols()
+
+        XCTAssertNotNil(session.map)
+        XCTAssertNotNil(session.unloadedSymbols)
+        XCTAssertNotNil(session.symbols)
+
+        let analyzer = try GlibcMallocAnalyzer(session: session)
+        try analyzer.analyze()
+
     }
 }

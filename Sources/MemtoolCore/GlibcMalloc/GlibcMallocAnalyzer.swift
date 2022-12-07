@@ -136,7 +136,7 @@ public final class GlibcMallocAnalyzer {
 
     private func analyzeFreed() throws {
         analyzeFastBins(arenaBase: mainArena.segment.lowerBound)
-        analyzeBins(arenaBase: mainArena.segment.lowerBound)
+        //analyzeBins(arenaBase: mainArena.segment.lowerBound)
         try analyzeTcache()
 
         for region in exploredHeap {
@@ -157,12 +157,25 @@ public final class GlibcMallocAnalyzer {
         let fdOffset = MemoryLayout<malloc_chunk>.offset(of: \.fd)!
         let fastBinsCount = macro_NFASTBINS()
 
-        let fastBinBases = (0..<fastBinsCount).map { index in
-            UInt64(firstOffset - fdOffset + index * fastbinPtrSize) + arenaBase
+        let fastBinFirstChunkBases = (0..<fastBinsCount).map { index in
+            let base = arenaBase + UInt64(firstOffset - fdOffset + index * fastbinPtrSize)
+            let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.pid, load: base)
+            return chunk.buffer.fd.flatMap { UInt64(UInt(bitPattern: $0)) }
         }
 
-        fastBinBases.forEach { currentFastbin in
-            findFreedChunks(storeTo: &self.fastbinFreedChunks, arenaChunkBase: currentFastbin) { $0 != nil }
+        fastBinFirstChunkBases.forEach { currentFastbin in
+            var nextChunk = currentFastbin
+
+            while let current = nextChunk {
+                self.fastbinFreedChunks.insert(current)
+                let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.pid, load: current)
+                nextChunk = chunk.deobfuscate(pointer: \.fd).flatMap { UInt64(UInt(bitPattern: $0)) }
+
+                guard current != nextChunk else {
+                    error("Error: Endless cycle in chunk \(String(format: "%016lx", current)) while iterating bin  \(String(format: "%016lx", currentFastbin ?? 0))")
+                    return
+                }
+            }
         }
     }
 
@@ -177,7 +190,32 @@ public final class GlibcMallocAnalyzer {
         }
 
         binBases.forEach { currentBinBase in
-            findFreedChunks(storeTo: &self.binFreedChunks, arenaChunkBase: currentBinBase) { $0 != currentBinBase }
+            var firstIteration = true
+            var nextChunk: UInt64? = currentBinBase
+            let enterNext: (BoundRemoteMemory<malloc_chunk>) -> Bool = { chunk in
+                if firstIteration {
+                    firstIteration = false
+                    return chunk.buffer.fd.flatMap { UInt64(UInt(bitPattern: $0)) } != currentBinBase
+                }
+                return chunk.deobfuscate(pointer: \.fd).flatMap { UInt64(UInt(bitPattern: $0)) } != currentBinBase 
+            }
+        // Insert any iterated chunk to buffer. Ignore the first chunk, since it is arena chunk. If fd is nil, abort.
+            while let current = nextChunk {
+                let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.pid, load: current)
+                guard enterNext(chunk) else {
+                    return
+                }
+                nextChunk = chunk.deobfuscate(pointer: \.fd).flatMap { UInt64(UInt(bitPattern: $0)) }
+
+                guard current != nextChunk else {
+                    error("Error: Endless cycle in chunk \(String(format: "%016lx", current)) while iterating bin  \(String(format: "%016lx", currentBinBase))")
+                    return
+                }
+
+                if let nextChunk = nextChunk {
+                    self.binFreedChunks.insert(nextChunk)
+                }
+            }
         }
     }
 
@@ -205,7 +243,6 @@ public final class GlibcMallocAnalyzer {
         let entryOffset = UInt64(MemoryLayout<tcache_perthread_struct>.offset(of: \.entries.0)!)
         let entrySize: UInt64 = 8 // Size of pointer
 
-
         for i in 0..<Cutils.TCACHE_MAX_BINS {
             let i = UInt64(i)
             let count = BoundRemoteMemory<UInt16>(pid: pid, load: tCachePtrBase + countsOffset + i * countsSize)
@@ -224,45 +261,24 @@ public final class GlibcMallocAnalyzer {
 
     private func iterateTcacheChunks(from baseChunk: UInt64, count: UInt16) {
         let chunkUserSpactOffset = UInt64(MemoryLayout<malloc_chunk>.offset(of: \.fd)!)
-        let nextOffset = UInt64(MemoryLayout<tcache_entry>.offset(of: \.next)!)
 
         var currentBase: UInt64? = baseChunk
         for i in 0..<(count + 1) {
+            guard let base = currentBase else {
+                if i != count {
+                    error("Error: tcache entry " + String(format: "%016lx", baseChunk) + " ended iterating after \(i) steps, expected \(count) steps")
+                }
+                return
+            }
             guard i < count else {
                 error("Error: tcache entry " + String(format: "%016lx", baseChunk) + " exceeded the expected number of iterations!")
                 return
             }
-            guard let base = currentBase else {
-                error("Error: tcache entry " + String(format: "%016lx", baseChunk) + " ended iterating after \(i) steps, expected \(count) steps")
-                return
-            }
             let chunk = BoundRemoteMemory<tcache_entry>(pid: pid, load: base)
-            let remoteMemoryPseudoPointer = UnsafeRawPointer(bitPattern: UInt(chunk.segment.lowerBound + nextOffset))!
-            let nextPointer = swift_inspect_bridge__macro_REVEAL_PTR(chunk.buffer.next, remoteMemoryPseudoPointer)
+            let nextPointer = chunk.deobfuscate(pointer: \.next)
 
             currentBase = nextPointer.flatMap { UInt64(UInt(bitPattern: $0)) }
             tcacheFreedChunks.insert( base - chunkUserSpactOffset )
-        }
-    }
-
-    private func findFreedChunks(storeTo buffer: inout Set<UInt64>, arenaChunkBase: UInt64, whileFd: (UInt64?) -> Bool) {
-        var nextChunk: UInt64? = arenaChunkBase
-        // Insert any iterated chunk to buffer. Ignore the first chunk, since it is arena chunk. If fd is nil, abort.
-        while let current = nextChunk {
-            let fdBase = BoundRemoteMemory<malloc_chunk>(pid: pid, load: current).buffer.fd.flatMap { UInt64(UInt(bitPattern: $0)) }
-            guard whileFd(fdBase) else {
-                return
-            }
-            nextChunk = fdBase
-
-            guard current != nextChunk else {
-                error("Error: Endless cycle in chunk \(String(format: "%016lx", current)) while iterating bin  \(String(format: "%016lx", arenaChunkBase))")
-                return
-            }
-
-            if let nextChunk = nextChunk {
-                buffer.insert(nextChunk)
-            }
         }
     }
 
