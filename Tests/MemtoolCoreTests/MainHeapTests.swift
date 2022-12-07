@@ -113,7 +113,7 @@ final class MainHeapTests: XCTestCase {
 
         let output = program.readStdout(until: ";")
 
-        let pointers = output.components(separatedBy: " ").dropLast().compactMap { UInt64($0, radix: 16)}
+        let pointers = output.components(separatedBy: " ").dropLast().compactMap { UInt($0, radix: 16)}
         XCTAssertEqual(pointers.count, 6)
 
         let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)
@@ -157,7 +157,7 @@ final class MainHeapTests: XCTestCase {
 
         let output = program.readStdout(until: ";")
 
-        let pointers = output.components(separatedBy: " ").dropLast().compactMap { UInt64($0, radix: 16)}
+        let pointers = output.components(separatedBy: " ").dropLast().compactMap { UInt($0, radix: 16)}
         XCTAssertEqual(pointers.count, 6)
 
         let session = MemtoolCore.Session(pid: program.runningProgram.processIdentifier)

@@ -219,7 +219,7 @@ let peekOperation = Operation(keyword: "peek", help: "[typename] [hexa pointer] 
     let payload = input.trimmingPrefix("peek").trimmingCharacters(in: .whitespaces)
     let components = payload.components(separatedBy: " ")
 
-    guard components.count == 2, let base = UInt64(components[1].trimmingPrefix("0x"), radix: 16) else {
+    guard components.count == 2, let base = UInt(components[1].trimmingPrefix("0x"), radix: 16) else {
         return false
     }
 
@@ -266,7 +266,7 @@ let addressOperation = Operation(keyword: "addr", help: "[hexa pointer] Prints a
     }
     let payload = input.trimmingPrefix("addr").trimmingCharacters(in: .whitespaces)
 
-    guard let base = UInt64(payload.trimmingPrefix("0x"), radix: 16) else {
+    guard let base = UInt(payload.trimmingPrefix("0x"), radix: 16) else {
         return false
     }
 
@@ -343,7 +343,7 @@ let chunkOperation = Operation(keyword: "chunk", help: "[hexa pointer] Attempts 
     }
     let payload = input.trimmingPrefix("chunk").trimmingCharacters(in: .whitespaces)
 
-    guard let base = UInt64(payload.trimmingPrefix("0x"), radix: 16) else {
+    guard let base = UInt(payload.trimmingPrefix("0x"), radix: 16) else {
         return false
     }
 
@@ -375,7 +375,7 @@ let tcbOperation = Operation(keyword: "tcb", help: "Locates and prints Thread Co
     }
 
     // The pointer to the TCB should be in the FS register at all times (but we need to use FS_BASE in order to read FS)
-    let fsBase = UInt64(UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE)))
+    let fsBase = UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE))
 
     // Check, that we're not reading garbage and accessing the record wonn't cause crash
     guard session.map?.contains(where: { $0.range.contains(fsBase) && $0.properties.flags.contains([.read, .write])}) == true else {
@@ -399,15 +399,15 @@ let wordOperation = Operation(keyword: "word", help: "[decimal count] [hex point
     let components = payload.components(separatedBy: " ")
     guard 
         components.count >= 2,
-        let count = UInt64(components[0], radix: 10),
-        let base = UInt64(components[1].trimmingPrefix("0x"), radix: 16),
+        let count = UInt(components[0], radix: 10),
+        let base = UInt(components[1].trimmingPrefix("0x"), radix: 16),
         components.count == 2 || (components.count == 3 && components[2] == "-a")
     else {
         return false
     }
 
     let ascii = components.count == 3 && components[2] == "-a"
-    let bitSize = UInt64( ascii ? MemoryLayout<CChar>.size : MemoryLayout<UInt64>.size)
+    let bitSize = UInt( ascii ? MemoryLayout<CChar>.size : MemoryLayout<UInt>.size)
 
     guard let session = ctx.session else {
         MemtoolCore.error("Error: Not attached to a session!")
@@ -433,7 +433,7 @@ let wordOperation = Operation(keyword: "word", help: "[decimal count] [hex point
         let memory = RawRemoteMemory(pid: session.pid, load: range)
         print(memory.asAsciiString)
     } else {
-        var memory = ContiguousArray<UInt64>(repeating: 0, count: Int(count))
+        var memory = ContiguousArray<UInt>(repeating: 0, count: Int(count))
         memory.withUnsafeMutableBufferPointer { ptr in
             swift_inspect_bridge__ptrace_peekdata_initialize(session.pid, base, UnsafeMutableRawBufferPointer(ptr))
         }
@@ -514,7 +514,7 @@ let revealOperation = Operation(keyword: "reveal", help: "[hexa pointer] Applies
     }
     let payload = input.trimmingPrefix("reveal").trimmingCharacters(in: .whitespaces)
 
-    guard let base = UInt64(payload.trimmingPrefix("0x"), radix: 16) else {
+    guard let base = UInt(payload.trimmingPrefix("0x"), radix: 16) else {
         return false
     }
 

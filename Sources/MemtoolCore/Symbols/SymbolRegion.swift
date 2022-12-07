@@ -72,10 +72,10 @@ public struct SymbolFlags: Hashable {
 
 public struct UnloadedSymbolInfo: Hashable {
     public var file: String
-    public var location: UInt64
+    public var location: UInt
     public var flags: SymbolFlags
     public var segment: SymbolSection
-    public var size: UInt64
+    public var size: UInt
     public var name: String
 }
 
@@ -162,7 +162,7 @@ public enum SymbolSection: RawRepresentable, Equatable, Hashable {
 public typealias SymbolRegion = MemoryRegion<LoadedSymbolInfo>
 
 public extension SymbolRegion {
-    init?(unloadedSymbol: UnloadedSymbolInfo, executableFileBasePoints: [String: UInt64]) {
+    init?(unloadedSymbol: UnloadedSymbolInfo, executableFileBasePoints: [String: UInt]) {
         guard let base = executableFileBasePoints[unloadedSymbol.file] else {
             error("Error: Symbol \(unloadedSymbol) was not found")
             return nil

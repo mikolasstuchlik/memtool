@@ -7,7 +7,7 @@ public extension BoundRemoteMemory {
             return nil
         }
 
-        guard let offset = MemoryLayout<T>.offset(of: field).flatMap(UInt64.init(_:)) else {
+        guard let offset = MemoryLayout<T>.offset(of: field).flatMap(UInt.init(_:)) else {
             error("Error: Offset of field \(field) of chunk \(self) can not be calculated")
             return nil
         }

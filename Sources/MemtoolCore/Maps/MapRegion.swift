@@ -71,9 +71,9 @@ public enum MapPath: RawRepresentable, Equatable {
 
 public struct MapInfo {
     public var flags: MapFlags
-    public var offset: UInt64
-    public var device: (major: UInt64, minor: UInt64)
-    public var inode: UInt64
+    public var offset: UInt
+    public var device: (major: UInt, minor: UInt)
+    public var inode: UInt
     public var pathname: MapPath
 }
 

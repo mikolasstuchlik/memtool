@@ -361,10 +361,10 @@ extension Symbolication {
             }
             return UnloadedSymbolInfo(
                 file: file,
-                location: UInt64(String(result[locationRef]), radix: 16)!,
+                location: UInt(String(result[locationRef]), radix: 16)!,
                 flags: SymbolFlags(rawValue: String(result[flagsRef])),
                 segment: SymbolSection(rawValue: String(result[segmentRef])),
-                size: UInt64(String(result[sizeRef]), radix: 16)!,
+                size: UInt(String(result[sizeRef]), radix: 16)!,
                 name: String(result[nameRef]).trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }
@@ -381,10 +381,10 @@ extension Symbolication {
         }
         return UnloadedSymbolInfo(
             file: file,
-            location: UInt64(String(result[locationRef]), radix: 16)!,
+            location: UInt(String(result[locationRef]), radix: 16)!,
             flags: SymbolFlags(rawValue: String(result[flagsRef])),
             segment: SymbolSection(rawValue: String(result[segmentRef])),
-            size: UInt64(String(result[sizeRef]), radix: 16)!,
+            size: UInt(String(result[sizeRef]), radix: 16)!,
             name: String(result[nameRef]).trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }

@@ -7,7 +7,7 @@ public final class Session {
     public let pid: Int32
 
     public var map: [MapRegion]?
-    public var executableFileBasePoints: [String: UInt64]?
+    public var executableFileBasePoints: [String: UInt]?
     public var unloadedSymbols: [String: [UnloadedSymbolInfo]]?
     public var symbols: [SymbolRegion]?
 

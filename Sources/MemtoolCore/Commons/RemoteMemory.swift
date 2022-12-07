@@ -26,15 +26,15 @@ public struct BoundRemoteMemory<T> {
     public let segment: MemoryRange
     public let buffer: T
 
-    public init(pid: Int32, load baseAddress: UInt64, initialValue: T) {
-        self.segment = baseAddress..<(baseAddress + UInt64(MemoryLayout<T>.size))
+    public init(pid: Int32, load baseAddress: UInt, initialValue: T) {
+        self.segment = baseAddress..<(baseAddress + UInt(MemoryLayout<T>.size))
         var buffer = initialValue
         swift_inspect_bridge__ptrace_peekdata_initialize(pid, baseAddress, &buffer)
         self.buffer = buffer
     }
 
-    public init(pid: Int32, load baseAddress: UInt64) {
-        let segment = baseAddress..<(baseAddress + UInt64(MemoryLayout<T>.size))
+    public init(pid: Int32, load baseAddress: UInt) {
+        let segment = baseAddress..<(baseAddress + UInt(MemoryLayout<T>.size))
         let rawRemote = RawRemoteMemory(pid: pid, load: segment)
         self.init(bind: rawRemote)!
     }

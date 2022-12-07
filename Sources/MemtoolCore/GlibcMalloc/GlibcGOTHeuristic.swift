@@ -128,10 +128,10 @@ public final class TbssSymbolGlibcLdHeuristic {
     public let symbol: UnloadedSymbolInfo
     public let rDebug: SymbolRegion
     public let privateLinkItem: BoundRemoteMemory<link_map_private>
-    public let fsBase: UInt64
-    public let dtvBase: UInt64
+    public let fsBase: UInt
+    public let dtvBase: UInt
     public let indexDtv: BoundRemoteMemory<dtv_t>
-    public let loadedSymbolBase: UInt64
+    public let loadedSymbolBase: UInt
 
     public init(session: Session, fileName: String, tbssSymbolName: String) throws {
         self.pid = session.pid
@@ -170,7 +170,7 @@ public final class TbssSymbolGlibcLdHeuristic {
         let index = privateLinkItem.buffer.l_tls_modid
 
         // Get FS register
-        let fsBase = UInt64(UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE)))
+        let fsBase = UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE))
         self.fsBase = fsBase
         guard map.contains(where: { $0.range.contains(fsBase) && $0.properties.flags.contains([.read, .write])}) == true else {
             throw Error.fsBaseNotInReadableSpace
@@ -180,17 +180,17 @@ public final class TbssSymbolGlibcLdHeuristic {
         guard head.buffer.dtv != nil else {
             throw Error.dtvNotInitialized
         }
-        let dtvBase = UInt64(UInt(bitPattern: head.buffer.dtv))
+        let dtvBase = UInt(bitPattern: head.buffer.dtv)
         self.dtvBase = dtvBase
-        let dtvSizeBase = dtvBase - UInt64(MemoryLayout<dtv_t>.size)
+        let dtvSizeBase = dtvBase - UInt(MemoryLayout<dtv_t>.size)
         let dtvCount = BoundRemoteMemory<dtv_t>(pid: pid, load: dtvSizeBase)
         guard dtvCount.buffer.counter >= index else {
             throw Error.dtvTooSmall
         }
 
-        let indexDtvBase = dtvBase + UInt64(index * MemoryLayout<dtv_t>.size)
+        let indexDtvBase = dtvBase + UInt(index * MemoryLayout<dtv_t>.size)
         self.indexDtv = BoundRemoteMemory<dtv_t>(pid: pid, load: indexDtvBase)
-        let loadedSymbolBase = UInt64(UInt(bitPattern: indexDtv.buffer.pointer.val)) + symbolReference.location
+        let loadedSymbolBase = UInt(bitPattern: indexDtv.buffer.pointer.val) + symbolReference.location
         self.loadedSymbolBase = loadedSymbolBase
 
         guard map.contains(where: { $0.range.contains(loadedSymbolBase) && $0.properties.flags.contains([.read, .write])}) == true else {
@@ -200,7 +200,7 @@ public final class TbssSymbolGlibcLdHeuristic {
 
     private static func iterateRDebug(pid: Int32, symbol: SymbolRegion, file: String) -> BoundRemoteMemory<link_map>? {
         let rDebugContent = BoundRemoteMemory<r_debug>(pid: pid, load: symbol.range.lowerBound)
-        let loadLimit = UInt64(file.utf8.count)
+        let loadLimit = UInt(file.utf8.count)
 
         var nextLink = rDebugContent.buffer.r_map
         repeat {
@@ -208,9 +208,9 @@ public final class TbssSymbolGlibcLdHeuristic {
                 break
             }
 
-            let linkBase = UInt64(UInt(bitPattern: linkPtr))
+            let linkBase = UInt(bitPattern: linkPtr)
             let link = BoundRemoteMemory<link_map>(pid: pid, load: linkBase)
-            let nameBase = UInt64(UInt(bitPattern: link.buffer.l_name))
+            let nameBase = UInt(bitPattern: link.buffer.l_name)
             let name = RawRemoteMemory(pid: pid, load: nameBase..<(nameBase + loadLimit))
             let nameString = String(cString: Array(name.buffer))
             // While debugging, it was discovered, that ld string contains only part of the path, "/lib/x86_64-linux-gnu/libc.so.6" instead of "/usr/lib/x86_64-linux-gnu/libc.so.6"
@@ -279,7 +279,7 @@ public final class GlibcErrnoAsmHeuristic {
     public let glibcPath: String
 
     public let rawProcessOutput: String
-    public let errnoLocation: UInt64
+    public let errnoLocation: UInt
 
     public init(session: Session, glibcPath: String) throws {
         self.pid = session.pid
@@ -328,20 +328,20 @@ public final class GlibcErrnoAsmHeuristic {
         }
 
         // Via debugger I have determined, that the correct value requires `rip` to have the value of following instruction :thinking:
-        guard let rip = UInt64(assemblyLineComponents[2].address.trimmingCharacters(in: CharacterSet(charactersIn: ":")), radix: 16) else {
+        guard let rip = UInt(assemblyLineComponents[2].address.trimmingCharacters(in: CharacterSet(charactersIn: ":")), radix: 16) else {
             throw Error.assemblyParsingFailed
         }
 
         guard 
             let result = try? GlibcErrnoAsmHeuristic.regex.firstMatch(in: assemblyLineComponents[1].argument),
-            let address = UInt64(String(result[GlibcErrnoAsmHeuristic.hexanumberRef]).trimmingPrefix("0x"), radix: 16)
+            let address = UInt(String(result[GlibcErrnoAsmHeuristic.hexanumberRef]).trimmingPrefix("0x"), radix: 16)
         else {
             throw Error.assemblyParsingFailed
         }
 
         let gotOffset = address + rip
 
-        let glibcBase: UInt64? = map.reduce(nil) { prev, current -> UInt64? in
+        let glibcBase: UInt? = map.reduce(nil) { prev, current -> UInt? in
             if case let .file(file) = current.properties.pathname, file == glibcPath {
                 if let prev {
                     return min(prev, current.range.lowerBound)
@@ -356,10 +356,10 @@ public final class GlibcErrnoAsmHeuristic {
         let gotOffsetLocation = glibcBase + gotOffset
 
         // This access should be checked.
-        let fsOffsetToErrno = BoundRemoteMemory<UInt64>(pid: pid, load: gotOffsetLocation)
+        let fsOffsetToErrno = BoundRemoteMemory<UInt>(pid: pid, load: gotOffsetLocation)
         
         // Get FS register
-        let fsBase = UInt64(UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE)))
+        let fsBase = UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.pid, FS_BASE))
 
         // This MUST overflow. errno should be located on lower address than FS
         let gotAddition = fsBase.addingReportingOverflow(fsOffsetToErrno.buffer)

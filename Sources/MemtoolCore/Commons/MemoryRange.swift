@@ -1,7 +1,7 @@
-public typealias MemoryRange = Range<UInt64>
+public typealias MemoryRange = Range<UInt>
 
 extension MemoryRange {
-    var unsignedCount: UInt64 {
+    var unsignedCount: UInt {
         upperBound - lowerBound
     }
 }

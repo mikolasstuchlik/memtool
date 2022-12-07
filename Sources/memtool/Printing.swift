@@ -5,7 +5,7 @@ protocol CLIPrint {
     var cliPrint: String { get }
 }
 
-extension UInt64: CLIPrint {
+extension UInt: CLIPrint {
     var cliPrint: String {
         String(format: "0x%016lx", self)
     }

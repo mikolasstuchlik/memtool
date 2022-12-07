@@ -16,8 +16,8 @@ extension malloc_chunk {
         self.mchunk_size & 0b1 > 0
     }
 
-    var size: UInt64 {
-        UInt64(UInt(bitPattern: self.mchunk_size)) & 0xfffffffffffffff8 
+    var size: UInt {
+        UInt(bitPattern: self.mchunk_size) & 0xfffffffffffffff8 
     }
 }
 
@@ -30,10 +30,10 @@ public struct Chunk {
         (content.segment.lowerBound - Chunk.chunkContentOffset)..<(content.segment.upperBound - Chunk.chunkContentEndOffset)
     }
 
-    public static let chunkContentOffset: UInt64 = UInt64(MemoryLayout<size_t>.size * 2)
-    public static let chunkContentEndOffset: UInt64 = UInt64(MemoryLayout<size_t>.size)
+    public static let chunkContentOffset: UInt = UInt(MemoryLayout<size_t>.size * 2)
+    public static let chunkContentEndOffset: UInt = UInt(MemoryLayout<size_t>.size)
 
-    public init(pid: Int32, baseAddress: UInt64) {
+    public init(pid: Int32, baseAddress: UInt) {
         self.header = BoundRemoteMemory<malloc_chunk>(pid: pid, load: baseAddress).buffer
         self.content = RawRemoteMemory(
             pid: pid, 

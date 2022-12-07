@@ -171,12 +171,12 @@ extension Map {
                 return nil
             }
             return MapRegion(
-                range: UInt64(String(result[startRef]), radix: 16)!..<UInt64(String(result[endRef]), radix: 16)!, 
+                range: UInt(String(result[startRef]), radix: 16)!..<UInt(String(result[endRef]), radix: 16)!, 
                 properties: MapInfo(
                     flags: MapFlags(rawValue: String(result[flagsRef])),
-                    offset: UInt64(String(result[offsetRef]), radix: 16)!,
-                    device: (major: UInt64(String(result[deviceMajorRef]), radix: 10)!, minor: UInt64(String(result[deviceMinorRef]), radix: 10)!),
-                    inode: UInt64(String(result[inodeRef]), radix: 10)!,
+                    offset: UInt(String(result[offsetRef]), radix: 16)!,
+                    device: (major: UInt(String(result[deviceMajorRef]), radix: 10)!, minor: UInt(String(result[deviceMinorRef]), radix: 10)!),
+                    inode: UInt(String(result[inodeRef]), radix: 10)!,
                     pathname: MapPath(rawValue: String(result[pathnameRef]).trimmingCharacters(in: .whitespacesAndNewlines))
                 )
             )

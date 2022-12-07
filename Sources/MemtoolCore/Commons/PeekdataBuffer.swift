@@ -9,32 +9,32 @@ import Cutils
 /// 
 /// - Warning: The buffer has to be C layouted struct! If you use Swift native type, youre in 
 /// risk of memory corruption!
-public func swift_inspect_bridge__ptrace_peekdata_initialize<T>(_ pid: pid_t, _ baseAddress : UInt64, _ buffer: inout T) {
+public func swift_inspect_bridge__ptrace_peekdata_initialize<T>(_ pid: pid_t, _ baseAddress : UInt, _ buffer: inout T) {
     withUnsafeMutableBytes(of: &buffer) { ptr in
         swift_inspect_bridge__ptrace_peekdata_buffer(
             pid, 
-            baseAddress, 
+            UInt64(baseAddress), 
             UInt64(MemoryLayout<T>.size), 
             ptr.baseAddress!
         )
     }
 }
 
-public func swift_inspect_bridge__ptrace_peekdata_initialize(_ pid: pid_t, _ baseAddress : UInt64, _ buffer: inout ContiguousArray<UInt8>) {
+public func swift_inspect_bridge__ptrace_peekdata_initialize(_ pid: pid_t, _ baseAddress : UInt, _ buffer: inout ContiguousArray<UInt8>) {
     buffer.withUnsafeMutableBufferPointer { ptr in
         swift_inspect_bridge__ptrace_peekdata_buffer(
             pid, 
-            baseAddress, 
+            UInt64(baseAddress), 
             UInt64(ptr.count), 
             ptr.baseAddress!
         )
     }
 }
 
-public func swift_inspect_bridge__ptrace_peekdata_initialize(_ pid: pid_t, _ baseAddress : UInt64, _ buffer: UnsafeMutableRawBufferPointer) {
+public func swift_inspect_bridge__ptrace_peekdata_initialize(_ pid: pid_t, _ baseAddress : UInt, _ buffer: UnsafeMutableRawBufferPointer) {
     swift_inspect_bridge__ptrace_peekdata_buffer(
         pid, 
-        baseAddress, 
+        UInt64(baseAddress), 
         UInt64(buffer.count), 
         buffer.baseAddress!
     )
