@@ -154,16 +154,7 @@ public final class TbssSymbolGlibcLdHeuristic {
         self.symbol = symbolReference
 
         // Locate r_debug TODO: Should probably verify that address belongs to glib
-        let rDebugLocation = symbols.first { symbol in
-            if 
-                symbol.properties.name == "_r_debug"
-            {
-                return true
-            }
-
-            return false
-        }
-        guard let rDebugLocation else {
+        guard let rDebugLocation = symbols.locate(knownSymbol: .rDebug).first else {
             throw Error.couldNotfindGlibcRdebug
         }
         self.rDebug = rDebugLocation

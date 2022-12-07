@@ -177,5 +177,11 @@ public extension SymbolRegion {
     }
 }
 
+public extension [SymbolRegion] {
+    func locate(knownSymbol: GlibcAssurances.KnownSymbols) -> [SymbolRegion] {
+        filter { $0.properties.name == knownSymbol.name }
+    }
+}
+
 // Workaround: Declaration in file with _StringProcessing was ignored.
 public enum Symbolication { }

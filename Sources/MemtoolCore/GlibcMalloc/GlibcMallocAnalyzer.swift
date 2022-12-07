@@ -29,7 +29,7 @@ public final class GlibcMallocAnalyzer {
             throw Error.initializeSessionWithMapAndSymbols
         }
 
-        guard let mainArena = symbols.first(where: { $0.properties.name == "main_arena"}) else {
+        guard let mainArena = symbols.locate(knownSymbol: .mainArena).first else {
             throw Error.mainArenaDebugSymbolNotFound
         }
 
@@ -213,7 +213,7 @@ public final class GlibcMallocAnalyzer {
 
         guard 
             let unloadedSymbols = session.unloadedSymbols,
-            let tCacheSymbol = unloadedSymbols.first(where: { file, _ in GlibcAssurances.fileFromGlibc(file, unloadedSymbols: unloadedSymbols)})?.value.first(where: { $0.name == "tcache"}) 
+            let tCacheSymbol = GlibcAssurances.glibcOccurances(of: .tCache, in: unloadedSymbols).first
         else {
             throw Error.couldNotLocateTcacheInDebugSymbols
         }

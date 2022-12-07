@@ -11,7 +11,6 @@ int main(void) {
 
 final class AssurancesTests: XCTestCase {
 
-    // FIXME: Rewrite symbol getters to allow for parted GLIBC
     func testGlibcSymbols() throws {
         let program = try AdhocProgram(
             name: String(describing: Self.self) + #function, 
@@ -26,30 +25,9 @@ final class AssurancesTests: XCTestCase {
         XCTAssertNotNil(session.unloadedSymbols)
         XCTAssertNotNil(session.symbols)
 
-        let glibcCandidates = session.unloadedSymbols!.filter { key, _ in
-            GlibcAssurances.fileFromGlibc(key, unloadedSymbols: session.unloadedSymbols!)
-        }
-        XCTAssertEqual(glibcCandidates.count, 1)
-
-        let mainArena = session.unloadedSymbols![glibcCandidates.keys.first!]!.contains { 
-            $0.name == "main_arena" && $0.segment == .known(.data)
-        }
-
-        let tCache = session.unloadedSymbols![glibcCandidates.keys.first!]!.contains { 
-            $0.name == "tcache" && $0.segment == .known(.tbss)
-        }
-
-        let errno = session.unloadedSymbols![glibcCandidates.keys.first!]!.contains { 
-            $0.name == "errno" && $0.segment == .known(.tbss)
-        }
-
-        let rDebug = session.unloadedSymbols![glibcCandidates.keys.first!]!.contains { 
-            $0.name == "_r_debug" && $0.segment == .known(.tbss)
-        }
-
-        XCTAssertTrue(mainArena)
-        XCTAssertTrue(tCache)
-        XCTAssertTrue(errno)
-        XCTAssertTrue(rDebug)
+        XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .mainArena, in: session.unloadedSymbols!).isEmpty)
+        XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .tCache, in: session.unloadedSymbols!).isEmpty)
+        XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .rDebug, in: session.unloadedSymbols!).isEmpty)
+        XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .errno, in: session.unloadedSymbols!).isEmpty)
     }
 }
