@@ -6,6 +6,9 @@ public final class GlibcMallocAnalyzer {
         case mainArenaDebugSymbolNotFound
         case onlySupportsGlibcMalloc
         case couldNotLocateTcacheInDebugSymbols
+        case couldNotLocateThreadArenaInDebugSymbols
+        case unknownSessionType
+        case arenaForSessionNotFound
     }
 
     private let session: ProcessSession
@@ -14,12 +17,14 @@ public final class GlibcMallocAnalyzer {
     public let mainArena: BoundRemoteMemory<malloc_state>
 
     /// Each chunk has ptreadId associated with it
+    public let tagThreadArenas: Bool
+    public private(set) var threadArenas: [Int32: (base: UInt, tlsResult: TbssSymbolGlibcLdHeuristic)]
     public private(set) var tcacheFreedChunks: [UInt: Int32]
     public private(set) var fastbinFreedChunks: Set<UInt>
     public private(set) var binFreedChunks: Set<UInt>
     public private(set) var exploredHeap: [GlibcMallocRegion]
 
-    public init(session: ProcessSession) throws {
+    public init(session: ProcessSession, tagThreadArenas: Bool = false) throws {
         guard 
             let map = session.map, 
             let unloadedSymbols = session.unloadedSymbols,
@@ -40,12 +45,15 @@ public final class GlibcMallocAnalyzer {
             throw Error.onlySupportsGlibcMalloc
         }
 
+        self.tagThreadArenas = tagThreadArenas
         self.session = session
         self.mainArena = try session.checkedLoad(of: malloc_state.self, base: mainArena.range.lowerBound)
+        self.threadArenas = [:]
         self.tcacheFreedChunks = [:]
         self.exploredHeap = []
         self.fastbinFreedChunks = []
         self.binFreedChunks = []
+        self.threadArenas = [:]
     }
 
     public func analyze() throws {
@@ -61,6 +69,21 @@ public final class GlibcMallocAnalyzer {
         try traverseThreadArenaChunks()
     }
 
+    public func view(for session: Session) throws -> [GlibcMallocRegion] {
+        let requestedOrigin: GlibcMallocStateOrigin
+        if let session = session as? ThreadSession {
+            guard let threadArena = threadArenas[session.tid] else {
+                throw Error.arenaForSessionNotFound
+            }
+            requestedOrigin = .threadHeap(base: threadArena.base)
+        } else if session is ProcessSession {
+            requestedOrigin = .mainHeap
+        } else {
+            throw Error.unknownSessionType
+        }
+        return exploredHeap.filter { $0.properties.origin.contains(requestedOrigin) }
+    }
+
     func localizeThreadArenas() throws {
         var currentBase = UInt(bitPattern: mainArena.buffer.next)
         while currentBase != mainArena.segment.lowerBound {
@@ -70,6 +93,23 @@ public final class GlibcMallocAnalyzer {
                 properties: GlibcMallocInfo(rebound: .mallocState, explored: false, origin: [.threadHeap(base: currentBase)])
             ))
             currentBase = UInt(bitPattern: threadArena.buffer.next)
+        }
+
+        guard tagThreadArenas else { return }
+
+        guard 
+            let unloadedSymbols = session.unloadedSymbols,
+            let threadArenaSymbol = GlibcAssurances.glibcOccurances(of: .threadArena, in: unloadedSymbols).first
+        else {
+            throw Error.couldNotLocateThreadArenaInDebugSymbols
+        }
+
+        for thread in session.threadSessions {
+            let tlsValue = try TbssSymbolGlibcLdHeuristic(session: thread, fileName: threadArenaSymbol.file, tbssSymbolName: threadArenaSymbol.name)
+            let arena = try session.checkedLoad(of: Optional<mstate>.self, base: tlsValue.loadedSymbolBase)
+            if let base = arena.buffer.flatMap(UInt.init(bitPattern:)) {
+                threadArenas[thread.tid] = (base, tlsValue)
+            }
         }
     }
 
@@ -332,7 +372,7 @@ public final class GlibcMallocAnalyzer {
 
             if let pthreadId = tcacheFreedChunks[chunkRange.lowerBound] {
                 chunkState = .heapTCache
-                origin.append(.tls(pthreadId: pthreadId))
+                origin.append(.tlsTCacge(pthreadId: pthreadId))
             }else if binFreedChunks.contains(chunkRange.lowerBound) {
                 chunkState = .heapBin
             } else if fastbinFreedChunks.contains(chunkRange.lowerBound) {

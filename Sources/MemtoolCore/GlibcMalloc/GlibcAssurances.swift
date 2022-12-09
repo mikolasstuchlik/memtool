@@ -7,6 +7,7 @@ public enum GlibcAssurances {
 
         public static let mainArena = KnownSymbols(name: "main_arena", segment: .known(.data))
         public static let tCache = KnownSymbols(name: "tcache", segment: .known(.tbss))
+        public static let threadArena = KnownSymbols(name: "thread_arena", segment: .known(.tbss))
         public static let errno: GlibcAssurances.KnownSymbols = KnownSymbols(name: "errno", segment: .known(.tbss))
         public static let rDebug = KnownSymbols(name: "_r_debug", segment: .known(.bss))
     }

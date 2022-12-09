@@ -29,6 +29,7 @@ final class AssurancesTests: XCTestCase {
 
         XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .mainArena, in: session.unloadedSymbols!).isEmpty)
         XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .tCache, in: session.unloadedSymbols!).isEmpty)
+        XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .threadArena, in: session.unloadedSymbols!).isEmpty)
         XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .rDebug, in: session.unloadedSymbols!).isEmpty)
         XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .errno, in: session.unloadedSymbols!).isEmpty)
     }
