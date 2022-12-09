@@ -13,7 +13,8 @@ public final class GlibcMallocAnalyzer {
     // Main arena is excluded from `exploredHeap`, because it is located in the Glibc .data section.
     public let mainArena: BoundRemoteMemory<malloc_state>
 
-    public private(set) var tcacheFreedChunks: Set<UInt>
+    /// Each chunk has ptreadId associated with it
+    public private(set) var tcacheFreedChunks: [UInt: Int32]
     public private(set) var fastbinFreedChunks: Set<UInt>
     public private(set) var binFreedChunks: Set<UInt>
     public private(set) var exploredHeap: [GlibcMallocRegion]
@@ -40,8 +41,8 @@ public final class GlibcMallocAnalyzer {
         }
 
         self.session = session
-        self.mainArena = BoundRemoteMemory<malloc_state>(pid: session.pid, load: mainArena.range.lowerBound)
-        self.tcacheFreedChunks = []
+        self.mainArena = try session.checkedLoad(of: malloc_state.self, base: mainArena.range.lowerBound)
+        self.tcacheFreedChunks = [:]
         self.exploredHeap = []
         self.fastbinFreedChunks = []
         self.binFreedChunks = []
@@ -53,26 +54,26 @@ public final class GlibcMallocAnalyzer {
             exploredHeap = []
         }
 
-        localizeThreadArenas()
-        analyzeThreadArenas()
+        try localizeThreadArenas()
+        try analyzeThreadArenas()
         try analyzeFreed()
-        traverseMainArenaChunks()
-        traverseThreadArenaChunks()
+        try traverseMainArenaChunks()
+        try traverseThreadArenaChunks()
     }
 
-    func localizeThreadArenas() {
+    func localizeThreadArenas() throws {
         var currentBase = UInt(bitPattern: mainArena.buffer.next)
         while currentBase != mainArena.segment.lowerBound {
-            let threadArena = BoundRemoteMemory<malloc_state>(pid: session.pid, load: currentBase)
+            let threadArena = try session.checkedLoad(of: malloc_state.self, base: currentBase)
             exploredHeap.append(GlibcMallocRegion(
                 range: threadArena.segment, 
-                properties: GlibcMallocInfo(rebound: .mallocState, explored: false)
+                properties: GlibcMallocInfo(rebound: .mallocState, explored: false, origin: [.threadHeap(base: currentBase)])
             ))
             currentBase = UInt(bitPattern: threadArena.buffer.next)
         }
     }
 
-    func analyzeThreadArenas() {
+    func analyzeThreadArenas() throws {
         let exploredCopy = exploredHeap
         for (index, region) in exploredCopy.enumerated() {
             guard 
@@ -82,13 +83,13 @@ public final class GlibcMallocAnalyzer {
                 continue
             }
 
-            let threadArena = BoundRemoteMemory<malloc_state>(pid: session.pid, load: region.range.lowerBound)
-            let heapInfoBlocks = getAllHeapBlocks(for: threadArena)
+            let threadArena = try session.checkedLoad(of: malloc_state.self, base: region.range.lowerBound)
+            let heapInfoBlocks = try getAllHeapBlocks(for: threadArena)
 
             for heapInfo in heapInfoBlocks {
                 exploredHeap.append(GlibcMallocRegion(
                     range: heapInfo.segment, 
-                    properties: GlibcMallocInfo(rebound: .heapInfo, explored: false)
+                    properties: GlibcMallocInfo(rebound: .heapInfo, explored: false, origin: [.threadHeap(base: threadArena.segment.lowerBound)])
                 ))
             }
 
@@ -96,7 +97,7 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
-    func getAllHeapBlocks(for threadArena: BoundRemoteMemory<malloc_state>) -> [BoundRemoteMemory<heap_info>] {
+    func getAllHeapBlocks(for threadArena: BoundRemoteMemory<malloc_state>) throws -> [BoundRemoteMemory<heap_info>] {
         var result : [BoundRemoteMemory<heap_info>] = []
         
         guard threadArena.segment != mainArena.segment else {
@@ -109,17 +110,17 @@ public final class GlibcMallocAnalyzer {
             return []
         }
 
-        result.append(BoundRemoteMemory<heap_info>(pid: session.pid, load: session.map![topPage].range.lowerBound))
+        result.append(try session.checkedLoad(of: heap_info.self, base: session.map![topPage].range.lowerBound))
         while let current = result.last?.buffer.prev.flatMap(UInt.init(bitPattern:)) {
-            result.append(BoundRemoteMemory<heap_info>(pid: session.pid, load: current))
+            result.append(try session.checkedLoad(of: heap_info.self, base: current))
         }
 
         return result
     }
 
     private func analyzeFreed() throws {
-        analyzeFastBins(arenaBase: mainArena.segment.lowerBound)
-        analyzeBins(arenaBase: mainArena.segment.lowerBound)
+        try analyzeFastBins(arenaBase: mainArena.segment.lowerBound)
+        try analyzeBins(arenaBase: mainArena.segment.lowerBound)
         try analyzeTcache()
 
         for region in exploredHeap {
@@ -129,29 +130,30 @@ public final class GlibcMallocAnalyzer {
                 continue
             }
 
-            analyzeFastBins(arenaBase: region.range.lowerBound)
-            analyzeBins(arenaBase: region.range.lowerBound)
+            try analyzeFastBins(arenaBase: region.range.lowerBound)
+            try analyzeBins(arenaBase: region.range.lowerBound)
         }
     }
 
-    private func analyzeFastBins(arenaBase: UInt) {
+    private func analyzeFastBins(arenaBase: UInt) throws {
         let firstOffset = MemoryLayout<malloc_state>.offset(of: \.fastbinsY.0)!
         let fastbinPtrSize = MemoryLayout<mfastbinptr>.size
         let fdOffset = MemoryLayout<malloc_chunk>.offset(of: \.fd)!
         let fastBinsCount = macro_NFASTBINS()
 
-        let fastBinFirstChunkBases = (0..<fastBinsCount).compactMap { index in
+        let fastBinFirstChunkBases = try (0..<fastBinsCount).compactMap { index in
             let base = arenaBase + UInt(firstOffset - fdOffset + index * fastbinPtrSize)
-            let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.session.pid, load: base)
+            // Address of index 0 is the same as the index of the arena
+            let chunk = try session.checkedLoad(of: malloc_chunk.self, base: base, skipMismatchTypeCheck: index == 0)
             return chunk.buffer.fd.flatMap { UInt(bitPattern: $0) }
         }
 
-        fastBinFirstChunkBases.forEach { currentFastbin in
+        try fastBinFirstChunkBases.forEach { currentFastbin in
             var nextChunk: UInt? = currentFastbin
 
             while let current = nextChunk {
                 self.fastbinFreedChunks.insert(current)
-                let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.session.pid, load: current)
+                let chunk = try session.checkedLoad(of: malloc_chunk.self, base: current)
                 nextChunk = chunk.deobfuscate(pointer: \.fd).flatMap(UInt.init(bitPattern:))
 
                 guard current != nextChunk else {
@@ -162,15 +164,15 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
-    private func analyzeBins(arenaBase: UInt) {
+    private func analyzeBins(arenaBase: UInt) throws {
         let firstOffset = MemoryLayout<malloc_state>.offset(of: \.bins.0)!
         let binPtrSize = MemoryLayout<mchunkptr>.size * 2
         let fdOffset = MemoryLayout<malloc_chunk>.offset(of: \.fd)!
         let binsTotal = macro_NBINS_TOTAL() / 2
 
-        let binFirstChunkBases: [(breaker: UInt, base: UInt)] = (0..<binsTotal).compactMap { index -> (UInt, UInt)? in
+        let binFirstChunkBases: [(breaker: UInt, base: UInt)] = try (0..<binsTotal).compactMap { index -> (UInt, UInt)? in
             let base = UInt(firstOffset - fdOffset + index * binPtrSize) + arenaBase
-            let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.session.pid, load: base)
+            let chunk = try session.checkedLoad(of: malloc_chunk.self, base: base)
             guard 
                 let fd = chunk.buffer.fd.flatMap(UInt.init(bitPattern:)),
                 fd != base
@@ -180,11 +182,11 @@ public final class GlibcMallocAnalyzer {
             return (breaker: base, base: fd)
         }
 
-        binFirstChunkBases.forEach { item in
+        try binFirstChunkBases.forEach { item in
             var nextChunk: UInt? = item.base
             while let current = nextChunk, current != item.breaker {
                 self.binFreedChunks.insert(current)
-                let chunk = BoundRemoteMemory<malloc_chunk>(pid: self.session.pid, load: current)
+                let chunk = try session.checkedLoad(of: malloc_chunk.self, base: current)
                 nextChunk = chunk.buffer.fd.flatMap(UInt.init(bitPattern:))
             }
         }
@@ -206,7 +208,7 @@ public final class GlibcMallocAnalyzer {
     }
     private func analyzeTcacheFromTLS(of taskSession: Session, tCacheSymbol: UnloadedSymbolInfo) throws {
         let tCacheLocation = try TbssSymbolGlibcLdHeuristic(session: session, fileName: tCacheSymbol.file, tbssSymbolName: tCacheSymbol.name)
-        let tCacheTLSPtr = BoundRemoteMemory<swift_inspect_bridge__tcache_perthread_t>(pid: taskSession.ptraceId, load: tCacheLocation.loadedSymbolBase)
+        let tCacheTLSPtr = try session.checkedLoad(of: swift_inspect_bridge__tcache_perthread_t.self, base: tCacheLocation.loadedSymbolBase)
 
         guard let tCachePtr = tCacheTLSPtr.buffer.tcache_ptr else {
             return
@@ -221,21 +223,21 @@ public final class GlibcMallocAnalyzer {
 
         for i in 0..<Cutils.TCACHE_MAX_BINS {
             let i = UInt(i)
-            let count = BoundRemoteMemory<UInt16>(pid: self.session.pid, load: tCachePtrBase + countsOffset + i * countsSize)
+            let count = try session.checkedLoad(of: UInt16.self, base: tCachePtrBase + countsOffset + i * countsSize)
             if count.buffer == 0 {
                 continue // TODO: We could verify this as safety check
             }
 
-            let firstChunkPtr = BoundRemoteMemory<swift_inspect_bridge__tcache_entry_t>(pid: self.session.pid, load: tCachePtrBase + entryOffset + i * entrySize)
+            let firstChunkPtr = try session.checkedLoad(of: swift_inspect_bridge__tcache_entry_t.self, base: tCachePtrBase + entryOffset + i * entrySize)
             guard let firstChunkBase = firstChunkPtr.buffer.next.flatMap(UInt.init(bitPattern:)) else {
                 error("Error: tcache " + String(format: "%016lx", tCachePtrBase) + " in index \(i) is null but count is greater than 0")
                 continue
             }
-            iterateTcacheChunks(from: firstChunkBase, count: count.buffer)
+            try iterateTcacheChunks(from: firstChunkBase, count: count.buffer, taskSession: taskSession)
         }
     }
 
-    private func iterateTcacheChunks(from baseChunk: UInt, count: UInt16) {
+    private func iterateTcacheChunks(from baseChunk: UInt, count: UInt16, taskSession: Session) throws {
         let chunkUserSpactOffset = UInt(MemoryLayout<malloc_chunk>.offset(of: \.fd)!)
 
         var currentBase: UInt? = baseChunk
@@ -250,30 +252,26 @@ public final class GlibcMallocAnalyzer {
                 error("Error: tcache entry " + String(format: "%016lx", baseChunk) + " exceeded the expected number of iterations!")
                 return
             }
-            let chunk = BoundRemoteMemory<tcache_entry>(pid: self.session.pid, load: base)
+            let chunk = try session.checkedLoad(of: tcache_entry.self, base: base)
             let nextPointer = chunk.deobfuscate(pointer: \.next)
 
             currentBase = nextPointer.flatMap(UInt.init(bitPattern:))
-            tcacheFreedChunks.insert( base - chunkUserSpactOffset )
+            tcacheFreedChunks[base - chunkUserSpactOffset] = taskSession.ptraceId
         }
     }
 
-    func traverseMainArenaChunks() {
+    func traverseMainArenaChunks() throws {
         let topChunk = UInt(bitPattern: mainArena.buffer.top)
         guard let mainHeapMap = getMapIndex(for: topChunk) else {
             error("Error: Top chunk of main arena is outside mapped memory!")
             return
         }
 
-        let chunks = traverseChunks(
-            in: session.map![mainHeapMap].range.lowerBound..<topChunk,
-            assumeHasTopChunk: true,
-            isMainArena: true
-        )
+        let chunks = try traverseChunks(in: session.map![mainHeapMap].range.lowerBound..<topChunk)
         exploredHeap.append(contentsOf: chunks)
     }
 
-    func traverseThreadArenaChunks() {
+    func traverseThreadArenaChunks() throws {
         let exploredCopy = exploredHeap
         for (index, region) in exploredCopy.enumerated() {
             guard 
@@ -283,10 +281,10 @@ public final class GlibcMallocAnalyzer {
                 continue
             }
 
-            let heapInfo = BoundRemoteMemory<heap_info>(pid: session.pid, load: region.range.lowerBound)
+            let heapInfo = try session.checkedLoad(of: heap_info.self, base: region.range.lowerBound)
             let arenaBase = UInt(bitPattern: heapInfo.buffer.ar_ptr)
             
-            let threadArena = BoundRemoteMemory<malloc_state>(pid: session.pid, load: arenaBase)
+            let threadArena = try session.checkedLoad(of: malloc_state.self, base: arenaBase)
             let topChunkBase = UInt(bitPattern: threadArena.buffer.top)
 
             var assumedRange = heapInfo.segment.upperBound..<(heapInfo.segment.upperBound + UInt(heapInfo.buffer.size))
@@ -295,33 +293,25 @@ public final class GlibcMallocAnalyzer {
                 assumedRange = threadArena.segment.upperBound..<topChunkBase
             }
 
-            let containsTopChunk: Bool
-            if assumedRange.contains(topChunkBase) {
-                assumedRange = assumedRange.lowerBound..<topChunkBase
-                containsTopChunk = true
-            } else {
-                containsTopChunk = false
-            }
-
             // TODO: Check alignment validity!
             if assumedRange.lowerBound % 16 != 0 {
                 let alignment = assumedRange.lowerBound % 16
                 assumedRange = (assumedRange.lowerBound + alignment)..<assumedRange.upperBound
             }
 
-            let chunks = traverseChunks(in: assumedRange, assumeHasTopChunk: containsTopChunk)
+            let chunks = try traverseChunks(in: assumedRange, threadHeapBase: threadArena.segment.lowerBound)
             exploredHeap.append(contentsOf: chunks)
 
             exploredHeap[index].properties.explored = true
         }
     }
 
-    func traverseChunks(in chunkArea: Range<UInt>, assumeHasTopChunk hasTopChunk: Bool = false, isMainArena: Bool = false) -> [GlibcMallocRegion] {
+    func traverseChunks(in chunkArea: Range<UInt>, threadHeapBase: UInt? = nil) throws -> [GlibcMallocRegion] {
         var chunks: [GlibcMallocRegion] = []
         var currentTop: UInt = chunkArea.lowerBound
 
         while chunkArea.contains(currentTop) {
-            let chunk = BoundRemoteMemory<malloc_chunk>(pid: session.pid, load: currentTop)
+            let chunk = try session.checkedLoad(of: malloc_chunk.self, base: currentTop)
             if chunk.buffer.isPreviousInUse == false, chunks.count > 0 {
                 if 
                     case let .mallocChunk(state) = chunks[chunks.count - 1].properties.rebound, 
@@ -338,8 +328,11 @@ public final class GlibcMallocAnalyzer {
             }
 
             var chunkState: GlibcMallocChunkState
-            if tcacheFreedChunks.contains(chunkRange.lowerBound) {
+            var origin: [GlibcMallocStateOrigin] = [threadHeapBase == nil ? .mainHeap : .threadHeap(base: threadHeapBase!)]
+
+            if let pthreadId = tcacheFreedChunks[chunkRange.lowerBound] {
                 chunkState = .heapTCache
+                origin.append(.tls(pthreadId: pthreadId))
             }else if binFreedChunks.contains(chunkRange.lowerBound) {
                 chunkState = .heapBin
             } else if fastbinFreedChunks.contains(chunkRange.lowerBound) {
@@ -350,7 +343,7 @@ public final class GlibcMallocAnalyzer {
 
             chunks.append(GlibcMallocRegion(
                 range: chunkRange, 
-                properties: .init(rebound: .mallocChunk(chunkState), explored: true)
+                properties: .init(rebound: .mallocChunk(chunkState), explored: true, origin: origin)
             ))
             currentTop = chunkRange.upperBound
         }

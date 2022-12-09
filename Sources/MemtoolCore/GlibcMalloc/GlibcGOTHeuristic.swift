@@ -121,7 +121,7 @@ public final class TbssSymbolGlibcLdHeuristic {
         case symbolNotInReadableSpace
     }
 
-    public let ptraceId: Int32
+    public let session: Session
     public let symbolName: String
     public let fileName: String
 
@@ -134,7 +134,7 @@ public final class TbssSymbolGlibcLdHeuristic {
     public let loadedSymbolBase: UInt
 
     public init(session: Session, fileName: String, tbssSymbolName: String) throws {
-        self.ptraceId = session.ptraceId
+        self.session = session
         self.symbolName = tbssSymbolName
         self.fileName = fileName
 
@@ -160,12 +160,12 @@ public final class TbssSymbolGlibcLdHeuristic {
         self.rDebug = rDebugLocation
 
         // Iterate link items in r_debug and locate item for this file
-        guard let linkItem = TbssSymbolGlibcLdHeuristic.iterateRDebug(pid: ptraceId, symbol: rDebug, file: fileName) else {
+        guard let linkItem = try TbssSymbolGlibcLdHeuristic.iterateRDebug(session: session, symbol: rDebug, file: fileName) else {
             throw Error.couldNotLocateLinkItem
         }
 
         // Rebound to link_item_private. Following code braks Glibc guarentees and needs to be validated!
-        let privateLinkItem = BoundRemoteMemory<link_map_private>(pid: ptraceId, load: linkItem.segment.lowerBound)
+        let privateLinkItem = try session.checkedLoad(of: link_map_private.self, base: linkItem.segment.lowerBound, skipMismatchTypeCheck: true)
         self.privateLinkItem = privateLinkItem
         let index = privateLinkItem.buffer.l_tls_modid
 
@@ -176,20 +176,20 @@ public final class TbssSymbolGlibcLdHeuristic {
             throw Error.fsBaseNotInReadableSpace
         }
 
-        let head = BoundRemoteMemory<tcbhead_t>(pid: session.ptraceId, load: fsBase)
+        let head = try session.checkedLoad(of: tcbhead_t.self, base: fsBase)
         guard head.buffer.dtv != nil else {
             throw Error.dtvNotInitialized
         }
         let dtvBase = UInt(bitPattern: head.buffer.dtv)
         self.dtvBase = dtvBase
         let dtvSizeBase = dtvBase - UInt(MemoryLayout<dtv_t>.size)
-        let dtvCount = BoundRemoteMemory<dtv_t>(pid: ptraceId, load: dtvSizeBase)
+        let dtvCount =  try session.checkedLoad(of: dtv_t.self, base: dtvSizeBase)
         guard dtvCount.buffer.counter >= index else {
             throw Error.dtvTooSmall
         }
 
         let indexDtvBase = dtvBase + UInt(index * MemoryLayout<dtv_t>.size)
-        self.indexDtv = BoundRemoteMemory<dtv_t>(pid: ptraceId, load: indexDtvBase)
+        self.indexDtv =  try session.checkedLoad(of: dtv_t.self, base: indexDtvBase)
         let loadedSymbolBase = UInt(bitPattern: indexDtv.buffer.pointer.val) + symbolReference.location
         self.loadedSymbolBase = loadedSymbolBase
 
@@ -198,8 +198,8 @@ public final class TbssSymbolGlibcLdHeuristic {
         }
     }
 
-    private static func iterateRDebug(pid: Int32, symbol: SymbolRegion, file: String) -> BoundRemoteMemory<link_map>? {
-        let rDebugContent = BoundRemoteMemory<r_debug>(pid: pid, load: symbol.range.lowerBound)
+    private static func iterateRDebug(session: Session, symbol: SymbolRegion, file: String) throws -> BoundRemoteMemory<link_map>? {
+        let rDebugContent = try session.checkedLoad(of: r_debug.self, base: symbol.range.lowerBound)
         let loadLimit = UInt(file.utf8.count)
 
         var nextLink = rDebugContent.buffer.r_map
@@ -209,9 +209,9 @@ public final class TbssSymbolGlibcLdHeuristic {
             }
 
             let linkBase = UInt(bitPattern: linkPtr)
-            let link = BoundRemoteMemory<link_map>(pid: pid, load: linkBase)
+            let link = try session.checkedLoad(of: link_map.self, base: linkBase)
             let nameBase = UInt(bitPattern: link.buffer.l_name)
-            let name = RawRemoteMemory(pid: pid, load: nameBase..<(nameBase + loadLimit))
+            let name = RawRemoteMemory(pid: session.pid, load: nameBase..<(nameBase + loadLimit))
             let nameString = String(cString: Array(name.buffer))
             // While debugging, it was discovered, that ld string contains only part of the path, "/lib/x86_64-linux-gnu/libc.so.6" instead of "/usr/lib/x86_64-linux-gnu/libc.so.6"
             if !nameString.isEmpty, file.hasSuffix(nameString) {
@@ -355,8 +355,7 @@ public final class GlibcErrnoAsmHeuristic {
 
         let gotOffsetLocation = glibcBase + gotOffset
 
-        // This access should be checked.
-        let fsOffsetToErrno = BoundRemoteMemory<UInt>(pid: pid, load: gotOffsetLocation)
+        let fsOffsetToErrno = try session.checkedLoad(of: UInt.self, base: gotOffsetLocation)
         
         // Get FS register
         let fsBase = UInt(bitPattern: swift_inspect_bridge__ptrace_peekuser(session.ptraceId, FS_BASE))

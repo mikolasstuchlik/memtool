@@ -33,7 +33,10 @@ public struct Chunk {
     public static let chunkContentOffset: UInt = UInt(MemoryLayout<size_t>.size * 2)
     public static let chunkContentEndOffset: UInt = UInt(MemoryLayout<size_t>.size)
 
-    public init(pid: Int32, baseAddress: UInt) {
+}
+
+public extension Chunk {
+    init(pid: Int32, baseAddress: UInt) {
         self.header = BoundRemoteMemory<malloc_chunk>(pid: pid, load: baseAddress).buffer
         self.content = RawRemoteMemory(
             pid: pid, 

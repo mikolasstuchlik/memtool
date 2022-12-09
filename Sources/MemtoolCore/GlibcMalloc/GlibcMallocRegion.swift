@@ -17,9 +17,14 @@ public enum GlibcMallocAssumedRebound: Equatable {
     case heapInfo
 }
 
+public enum GlibcMallocStateOrigin: Equatable {
+    case tls(pthreadId: Int32), mainHeap, threadHeap(base: UInt)
+}
+
 public struct GlibcMallocInfo: Equatable {
     public var rebound: GlibcMallocAssumedRebound
     public var explored: Bool
+    public var origin: [GlibcMallocStateOrigin]
 }
 
 public typealias GlibcMallocRegion = MemoryRegion<GlibcMallocInfo>

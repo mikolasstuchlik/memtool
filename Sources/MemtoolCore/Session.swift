@@ -2,13 +2,57 @@ import Foundation
 import Cutils
 import Glibc
 
-public protocol Session {
+public struct MemoryTag {
+    var type: Any.Type
+}
+
+public protocol Session: AnyObject {
+    var pid: Int32 { get }
     var ptraceId: Int32 { get }
 
     var map: [MapRegion]? { get set }
     var executableFileBasePoints: [String: UInt]? { get set }
     var unloadedSymbols: [String: [UnloadedSymbolInfo]]? { get set }
     var symbols: [SymbolRegion]? { set get }
+
+    var tag: [UInt: MemoryTag] { get set }
+}
+
+public enum SessionError: Error {
+    case loadOutsideOfKnownMemory
+    case loadingPreviouslyLoadedTypeMismatch
+}
+
+public extension Session {
+    func checkedLoad<T>(of type: T.Type, base: UInt, skipMismatchTypeCheck: Bool = false) throws -> BoundRemoteMemory<T> {
+        let range = base..<(base + UInt(MemoryLayout<T>.size))
+
+        guard map?.contains(where: { $0.range.contains(range) }) == true else {
+            throw SessionError.loadOutsideOfKnownMemory
+        }
+
+        if !skipMismatchTypeCheck {
+            let existingTag = tag[base].flatMap({ $0.type == type })
+            guard existingTag == nil || existingTag == true else {
+                error("Error: Checked load of type \(type) at " + String(format: "%016lx", base) + " failed. Previously loaded a mismatching type \(tag[base]!.type).")
+                throw SessionError.loadingPreviouslyLoadedTypeMismatch
+            }
+            tag[base] = MemoryTag(type: type)
+        }
+
+        return BoundRemoteMemory(pid: pid, load: base)
+    }
+
+    func checkedChunk(baseAddress: UInt) throws -> Chunk {
+        let header = try checkedLoad(of: malloc_chunk.self, base: baseAddress).buffer
+        return Chunk(
+            header: header, 
+            content: RawRemoteMemory(
+                pid: pid, 
+                load: (baseAddress + Chunk.chunkContentOffset)..<(baseAddress + header.size + Chunk.chunkContentEndOffset)
+            )
+        )
+    }
 }
 
 public final class ProcessSession: Session {
@@ -21,6 +65,7 @@ public final class ProcessSession: Session {
     public var unloadedSymbols: [String: [UnloadedSymbolInfo]]?
     public var symbols: [SymbolRegion]?
     public var threadSessions: [ThreadSession] = []
+    public var tag: [UInt: MemoryTag] = [:]
 
     public init(pid: Int32) {
         swift_inspect_bridge__ptrace_attach(pid)
@@ -89,6 +134,7 @@ public final class ProcessSession: Session {
 }
 
 public final class ThreadSession: Session {
+    public var pid: Int32 { owner.pid }
     public var ptraceId: Int32 { tid }
     public let tid: Int32
     public unowned let owner: ProcessSession
@@ -128,6 +174,16 @@ public final class ThreadSession: Session {
             owner.symbols = newValue
         }
     }
+
+    public var tag: [UInt: MemoryTag] {
+        get {
+            owner.tag
+        }
+        set {
+            owner.tag = newValue
+        }
+    }
+
 
     public init(tid: Int32, owner: ProcessSession) {
         swift_inspect_bridge__ptrace_attach(tid)
