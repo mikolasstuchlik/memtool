@@ -24,8 +24,8 @@ Ordered TODO list:
      - Read values from TLS [DONE]
      - Read `tcache` [DONE]
      - Move from UInt64 to UInt [DONE]
-     - Refactor workflow with session to support threads and make it more fluent [IN PROGRESS]
-     - Traverse all threads and all `tcache`s
+     - Refactor workflow with session to support threads and make it more fluent [DONE]
+     - Traverse all threads and all `tcache`s with tests [IN PROGRESS]
    - Introduce tests for malloc
  - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper).
  - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present.
