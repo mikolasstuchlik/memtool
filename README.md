@@ -25,10 +25,12 @@ Ordered TODO list:
      - Read `tcache` [DONE]
      - Move from UInt64 to UInt [DONE]
      - Refactor workflow with session to support threads and make it more fluent [DONE]
-     - Traverse all threads and all `tcache`s with tests [IN PROGRESS]
-   - Introduce tests for malloc
- - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper).
- - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present.
+     - Traverse all threads and all `tcache`s with tests [DONE]
+   - Introduce tests for malloc [DONE]
+ - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper). [IN PROGRESS]
+   - Traverse and tag `free` arenas [IN PROGRESS] 
+ - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present. [ABANDONED]
+ - Add checks for validated and supported version of Glibc
  - Incorporate libMemtoolCore into `swift-inspect`
  - Release version 1.0 of `memtool` and open PR on `apple/swift`
  - Using metadata from `swift-inspect`, create initial "Memory Graph" algorithm on Linux

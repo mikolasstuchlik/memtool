@@ -117,4 +117,41 @@ final class ThreadedHeapsTests: XCTestCase {
             XCTAssertEqual(view[12].properties.rebound, .mallocChunk(.heapActive))
         }
     }
+
+    func testMallocBinFrees() throws {
+        let program = try AdhocProgram(
+            name: String(describing: Self.self) + #function, 
+            code: mallocManyFrees
+        )
+
+        sleep(3)
+
+        let session = MemtoolCore.ProcessSession(pid: program.runningProgram.processIdentifier)
+        session.loadMap()
+        session.loadSymbols()
+
+        XCTAssertNotNil(session.map)
+        XCTAssertNotNil(session.unloadedSymbols)
+        XCTAssertNotNil(session.symbols)
+
+        let analyzer = try GlibcMallocAnalyzer(session: session)
+        try analyzer.analyze()
+
+        for thread in session.threadSessions {
+            let view = try analyzer.view(for: thread)
+            XCTAssertEqual(view[0].properties.rebound, .mallocState)
+            XCTAssertEqual(view[1].properties.rebound, .heapInfo)
+            XCTAssertEqual(view[2].properties.rebound, .mallocChunk(.heapActive)) // unknown chunk
+            XCTAssertEqual(view[3].properties.rebound, .mallocChunk(.heapBin))
+            XCTAssertEqual(view[4].properties.rebound, .mallocChunk(.heapActive))
+            XCTAssertEqual(view[5].properties.rebound, .mallocChunk(.heapBin))
+            XCTAssertEqual(view[6].properties.rebound, .mallocChunk(.heapActive))
+            XCTAssertEqual(view[7].properties.rebound, .mallocChunk(.heapBin))
+            XCTAssertEqual(view[8].properties.rebound, .mallocChunk(.heapActive))
+            XCTAssertEqual(view[9].properties.rebound, .mallocChunk(.heapBin))
+            XCTAssertEqual(view[10].properties.rebound, .mallocChunk(.heapActive))
+            XCTAssertEqual(view[11].properties.rebound, .mallocChunk(.heapBin))
+            XCTAssertEqual(view[12].properties.rebound, .mallocChunk(.heapActive))
+        }
+    }
 }
