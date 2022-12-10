@@ -17,10 +17,10 @@ Without introduction of malloc hooks, it can not be guaranteed, that all malloc 
 
 Ordered TODO list:
  - Assuming `main_arena` is known, traverse all reachable malloc chunks in all arenas. [DONE]
- - Tag chunks as freed [IN PROGRESS]
+ - Tag chunks as freed [DONE]
    - Tag fastbin chunks [DONE]
    - Tag bin chunks [DONE]
-   - Tag tcache chunks [IN PROGRESS]
+   - Tag tcache chunks [DONE]
      - Read values from TLS [DONE]
      - Read `tcache` [DONE]
      - Move from UInt64 to UInt [DONE]
@@ -28,7 +28,7 @@ Ordered TODO list:
      - Traverse all threads and all `tcache`s with tests [DONE]
    - Introduce tests for malloc [DONE]
  - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper). [IN PROGRESS]
-   - Traverse and tag `free` arenas [IN PROGRESS] 
+   - Traverse and tag `free` arenas [IN PROGRESS]  
  - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present. [ABANDONED]
  - Add checks for validated and supported version of Glibc
  - Incorporate libMemtoolCore into `swift-inspect`
