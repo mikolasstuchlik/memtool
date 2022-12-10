@@ -100,21 +100,21 @@ final class ThreadedHeapsTests: XCTestCase {
         let analyzer = try GlibcMallocAnalyzer(session: session, tagThreadArenas: true)
         try analyzer.analyze()
 
-        // TODO: Fix failing test, all chunks appear to be active!
         for thread in session.threadSessions {
             let view = try analyzer.view(for: thread)
-            XCTAssertEqual(view[0].properties.rebound, .heapInfo)
-            XCTAssertEqual(view[1].properties.rebound, .mallocState)
-            XCTAssertEqual(view[2].properties.rebound, .mallocChunk(.heapTCache))
+            XCTAssertEqual(view[0].properties.rebound, .mallocState)
+            XCTAssertEqual(view[1].properties.rebound, .heapInfo)
+            XCTAssertEqual(view[2].properties.rebound, .mallocChunk(.heapActive)) // unknown chunk
             XCTAssertEqual(view[3].properties.rebound, .mallocChunk(.heapTCache))
             XCTAssertEqual(view[4].properties.rebound, .mallocChunk(.heapTCache))
             XCTAssertEqual(view[5].properties.rebound, .mallocChunk(.heapTCache))
             XCTAssertEqual(view[6].properties.rebound, .mallocChunk(.heapTCache))
             XCTAssertEqual(view[7].properties.rebound, .mallocChunk(.heapTCache))
             XCTAssertEqual(view[8].properties.rebound, .mallocChunk(.heapTCache))
-            XCTAssertEqual(view[9].properties.rebound, .mallocChunk(.heapFastBin))
+            XCTAssertEqual(view[9].properties.rebound, .mallocChunk(.heapTCache))
             XCTAssertEqual(view[10].properties.rebound, .mallocChunk(.heapFastBin))
-            XCTAssertEqual(view[11].properties.rebound, .mallocChunk(.heapActive))
+            XCTAssertEqual(view[11].properties.rebound, .mallocChunk(.heapFastBin))
+            XCTAssertEqual(view[12].properties.rebound, .mallocChunk(.heapActive))
         }
     }
 }

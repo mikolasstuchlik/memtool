@@ -247,7 +247,7 @@ public final class GlibcMallocAnalyzer {
         }
     }
     private func analyzeTcacheFromTLS(of taskSession: Session, tCacheSymbol: UnloadedSymbolInfo) throws {
-        let tCacheLocation = try TbssSymbolGlibcLdHeuristic(session: session, fileName: tCacheSymbol.file, tbssSymbolName: tCacheSymbol.name)
+        let tCacheLocation = try TbssSymbolGlibcLdHeuristic(session: taskSession, fileName: tCacheSymbol.file, tbssSymbolName: tCacheSymbol.name)
         let tCacheTLSPtr = try session.checkedLoad(of: swift_inspect_bridge__tcache_perthread_t.self, base: tCacheLocation.loadedSymbolBase)
 
         guard let tCachePtr = tCacheTLSPtr.buffer.tcache_ptr else {
