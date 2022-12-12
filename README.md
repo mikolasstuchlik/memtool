@@ -28,7 +28,7 @@ Ordered TODO list:
      - Traverse all threads and all `tcache`s with tests [DONE]
    - Introduce tests for malloc [DONE]
  - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper). [IN PROGRESS]
-   - Traverse and tag `free` arenas [IN PROGRESS]  
+   - Traverse and tag `free` arenas [DONE] (Not covered by tests yet.)  
  - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present. [ABANDONED]
  - Add checks for validated and supported version of Glibc
  - Incorporate libMemtoolCore into `swift-inspect`

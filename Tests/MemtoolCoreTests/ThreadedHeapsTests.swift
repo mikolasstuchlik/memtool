@@ -78,6 +78,7 @@ private let mallocManyFrees = commons +
 
 """# + freesMain
 
+// TODO: Create tests for freed thread arenas
 final class ThreadedHeapsTests: XCTestCase {
     func testMallocFastbinFrees() throws {
         let program = try AdhocProgram(

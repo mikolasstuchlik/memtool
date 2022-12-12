@@ -18,7 +18,7 @@ public enum GlibcMallocAssumedRebound: Equatable {
 }
 
 public enum GlibcMallocStateOrigin: Equatable {
-    case tlsTCacge(pthreadId: Int32), mainHeap, threadHeap(base: UInt)
+    case tlsTCacge(pthreadId: Int32), mainHeap, threadHeap(base: UInt), freedArena
 }
 
 public struct GlibcMallocInfo: Equatable {

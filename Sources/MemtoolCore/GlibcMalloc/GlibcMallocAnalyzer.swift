@@ -63,6 +63,7 @@ public final class GlibcMallocAnalyzer {
         }
 
         try localizeThreadArenas()
+        try localizeFreedThreadArenas()
         try analyzeThreadArenas()
         try analyzeFreed()
         try traverseMainArenaChunks()
@@ -113,6 +114,21 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
+    func localizeFreedThreadArenas() throws {
+        var nextBase = mainArena.buffer.next_free.flatMap(UInt.init(bitPattern:))
+        while let currentBase = nextBase {
+            let threadArena = try session.checkedLoad(of: malloc_state.self, base: currentBase)
+            exploredHeap.append(GlibcMallocRegion(
+                range: threadArena.segment, 
+                properties: GlibcMallocInfo(rebound: .mallocState, explored: false, origin: [
+                    .threadHeap(base: currentBase),
+                    .freedArena
+                ])
+            ))
+            nextBase = threadArena.buffer.next_free.flatMap(UInt.init(bitPattern:))
+        }
+    }
+
     func analyzeThreadArenas() throws {
         let exploredCopy = exploredHeap
         for (index, region) in exploredCopy.enumerated() {
@@ -126,10 +142,16 @@ public final class GlibcMallocAnalyzer {
             let threadArena = try session.checkedLoad(of: malloc_state.self, base: region.range.lowerBound)
             let heapInfoBlocks = try getAllHeapBlocks(for: threadArena)
 
+            var origin = [GlibcMallocStateOrigin.threadHeap(base: threadArena.segment.lowerBound)]
+
+            if region.properties.origin.contains(.freedArena) {
+                origin.append(.freedArena)
+            }
+
             for heapInfo in heapInfoBlocks {
                 exploredHeap.append(GlibcMallocRegion(
                     range: heapInfo.segment, 
-                    properties: GlibcMallocInfo(rebound: .heapInfo, explored: false, origin: [.threadHeap(base: threadArena.segment.lowerBound)])
+                    properties: GlibcMallocInfo(rebound: .heapInfo, explored: false, origin: origin)
                 ))
             }
 
@@ -339,7 +361,13 @@ public final class GlibcMallocAnalyzer {
                 assumedRange = (assumedRange.lowerBound + alignment)..<assumedRange.upperBound
             }
 
-            let chunks = try traverseChunks(in: assumedRange, threadHeapBase: threadArena.segment.lowerBound)
+            var chunks = try traverseChunks(in: assumedRange, threadHeapBase: threadArena.segment.lowerBound)
+            if region.properties.origin.contains(.freedArena) {
+                for i in 0..<chunks.count {
+                    chunks[i].properties.origin.append(.freedArena)
+                }
+            }
+
             exploredHeap.append(contentsOf: chunks)
 
             exploredHeap[index].properties.explored = true

@@ -21,6 +21,7 @@ public protocol Session: AnyObject {
 public enum SessionError: Error {
     case loadOutsideOfKnownMemory
     case loadingPreviouslyLoadedTypeMismatch
+    case sizeAdditionOverflow
 }
 
 public extension Session {
@@ -45,12 +46,19 @@ public extension Session {
 
     func checkedChunk(baseAddress: UInt) throws -> Chunk {
         let header = try checkedLoad(of: malloc_chunk.self, base: baseAddress).buffer
-        return Chunk(
-            header: header, 
-            content: RawRemoteMemory(
-                pid: pid, 
-                load: (baseAddress + Chunk.chunkContentOffset)..<(baseAddress + header.size + Chunk.chunkContentEndOffset)
-            )
+        let endAddress = (baseAddress + Chunk.chunkContentEndOffset).addingReportingOverflow(header.size)
+
+        guard !endAddress.overflow else { 
+            throw SessionError.sizeAdditionOverflow
+        }
+
+        let chunkContent = (baseAddress + Chunk.chunkContentOffset)..<endAddress.partialValue
+
+        guard map?.contains(where: { $0.range.contains(chunkContent) }) == true else {
+            throw SessionError.loadOutsideOfKnownMemory
+        }
+
+        return Chunk(header: header, content: RawRemoteMemory(pid: pid, load: chunkContent)
         )
     }
 }
