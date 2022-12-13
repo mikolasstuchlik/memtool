@@ -192,7 +192,6 @@ public final class ThreadSession: Session {
         }
     }
 
-
     public init(tid: Int32, owner: ProcessSession) {
         swift_inspect_bridge__ptrace_attach(tid)
         self.owner = owner

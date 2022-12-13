@@ -40,7 +40,7 @@ public final class GlibcMallocAnalyzer {
         guard 
             let mainArenaInMap = map.first(where: { $0.range.contains(mainArena.range.lowerBound) }),
             case let .file(mainArenaFile) = mainArenaInMap.properties.pathname,
-            GlibcAssurances.fileFromGlibc(mainArenaFile, unloadedSymbols: unloadedSymbols)
+            GlibcAssurances.isFileFromGlibc(mainArenaFile, unloadedSymbols: unloadedSymbols)
         else {
             throw Error.onlySupportsGlibcMalloc
         }

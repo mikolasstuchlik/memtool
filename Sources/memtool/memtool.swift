@@ -158,6 +158,9 @@ let symbolOperation = Operation(keyword: "symbol", help: "Requires maps. Loads a
     }
 
     session.loadSymbols()
+    if !GlibcAssurances.isValidatedGlibcVersion(unloadedSymbols: session.unloadedSymbols!) {
+        MemtoolCore.error("Warning: MemtoolCore is not validated for Glibc version used by this program!")
+    }
 
     return true
 }

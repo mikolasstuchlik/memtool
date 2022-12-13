@@ -30,7 +30,7 @@ Ordered TODO list:
  - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper). [IN PROGRESS]
    - Traverse and tag `free` arenas [DONE] (Not covered by tests yet.)  
  - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present. [ABANDONED]
- - Add checks for validated and supported version of Glibc
+ - Add checks for validated and supported version of Glibc [DONE]
  - Incorporate libMemtoolCore into `swift-inspect`
  - Release version 1.0 of `memtool` and open PR on `apple/swift`
  - Using metadata from `swift-inspect`, create initial "Memory Graph" algorithm on Linux
