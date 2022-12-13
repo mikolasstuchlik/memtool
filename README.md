@@ -187,6 +187,7 @@ The task of reaching all of the malloc chunks allocated by `glibc malloc` is con
 [4] The Glibc Source Code, generated *2022-Aug-24* [https://codebrowser.dev/glibc/glibc/](https://codebrowser.dev/glibc/glibc/)
 
 [5] `man proc` Linux 5.13 release *2021-08-27* [https://www.kernel.org/doc/man-pages/](https://www.kernel.org/doc/man-pages/)
+
 [6] `man objdump` binutils-2.39 *2022-12-01*
 
 [7] `man elf` Linux 5.13 release *2021-03-22* [https://www.kernel.org/doc/man-pages/](https://www.kernel.org/doc/man-pages/)
