@@ -179,12 +179,18 @@ The task of reaching all of the malloc chunks allocated by `glibc malloc` is con
 *Notice, following literature is refered from the source code.*
 
 [1] Linux Memory Forensics: Dissecting the User Space Process Heap *16th October 2017* [https://www.forensicfocus.com/articles/linux-memory-forensics-dissecting-the-user-space-process-heap/](https://www.forensicfocus.com/articles/linux-memory-forensics-dissecting-the-user-space-process-heap/)
+
 [2] Malloc Internals, the Glibc wiki. *2022-08-09 17:51:50* [https://sourceware.org/glibc/wiki/MallocInternals](https://sourceware.org/glibc/wiki/MallocInternals)
+
 [3] fasterthanlime: Thread-local storage *Apr 26, 2020* [https://fasterthanli.me/series/making-our-own-executable-packer/part-13#c-programs](https://fasterthanli.me/series/making-our-own-executable-packer/part-13#c-programs)
+
 [4] The Glibc Source Code, generated *2022-Aug-24* [https://codebrowser.dev/glibc/glibc/](https://codebrowser.dev/glibc/glibc/)
+
 [5] `man proc` Linux 5.13 release *2021-08-27* [https://www.kernel.org/doc/man-pages/](https://www.kernel.org/doc/man-pages/)
 [6] `man objdump` binutils-2.39 *2022-12-01*
+
 [7] `man elf` Linux 5.13 release *2021-03-22* [https://www.kernel.org/doc/man-pages/](https://www.kernel.org/doc/man-pages/)
+
 [8] Chao-tic: A Deep dive into (implicit) Thread Local Storage *Dec 25, 2018* [Commit 046b398c85911835d89418c8d1b3098f740244a1](https://github.com/chao-tic/chao-tic.github.io/blob/master/_posts/2018-12-25-tls.markdown) [https://chao-tic.github.io/blog/2018/12/25/tls](https://chao-tic.github.io/blog/2018/12/25/tls)
 
 ## Note
