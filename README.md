@@ -192,3 +192,12 @@ I welcome any contribution at any stage of development.
 
 I am aware, that there are tools and plugins for lldb and gdb (and other programs) that already acomplish similar results. I have tried many of them and none fits the purpose. I want this tool to be simple enought to be expanded by Swift developers. Having the requirement to understand (for example) lldb scripting, the scripting language itself and the issue itself seems to me like a big task. 
 This tool is intended for Swift developers, it provides almost no value to other languages.
+
+
+List of some abbrevations relevant to this topic:
+ - TCB - Thread Control Block
+ - PCB - Process Control Block
+ - DTV - Dynamic Thread Vector
+ - TLS - Thread Local Storage
+ - GOT - Global Offset Table
+ - DSO - Dynamic Shared Object

@@ -1,5 +1,10 @@
 import Cutils
 
+/// Glibc analyzer is the most important classes of this project: it encapsulates the 
+/// algorithm for traversing the heap of the remote process and locating active as well
+/// as freed chunks.
+/// 
+/// This implementation is based on [1] and expanded for the tcache feature described in [2].
 public final class GlibcMallocAnalyzer {
     public enum Error: Swift.Error {
         case initializeSessionWithMapAndSymbols
@@ -11,19 +16,31 @@ public final class GlibcMallocAnalyzer {
         case arenaForSessionNotFound
     }
 
+    /// The process associated with this analysis
     private let session: ProcessSession
 
     // Main arena is excluded from `exploredHeap`, because it is located in the Glibc .data section.
     public let mainArena: BoundRemoteMemory<malloc_state>
 
-    /// Each chunk has ptreadId associated with it
+    /// Tagging thread arenas is not necessary, but useful for troubleshooting and testing When set to `true`, all explored items have expanded information.
     public let tagThreadArenas: Bool
+    /// Thread arenas and their corresponding TBSS heuristic that determined their location
     public private(set) var threadArenas: [Int32: (base: UInt, tlsResult: TbssSymbolGlibcLdHeuristic)]
+    /// Keys are base addresses of the chunks located in any of the tcaches. Values are the PID/TID of the
+    /// corresponding thread. 
     public private(set) var tcacheFreedChunks: [UInt: Int32]
+    /// Base addresses of chunks found in any of the arena fastbins.
     public private(set) var fastbinFreedChunks: Set<UInt>
+    /// Base addresses of chunks found in any of the arena bins.
     public private(set) var binFreedChunks: Set<UInt>
+
+    /// The collection holding the working data and the result of the analysis.
     public private(set) var exploredHeap: [GlibcMallocRegion]
 
+    /// Initializes the object with some of the data required for successful analysis.
+    /// - Parameters:
+    ///   - session: Process that shall be analyzed with maps and symbols loaded.
+    ///   - tagThreadArenas: Tagging thread arenas is not necessary, but useful for troubleshooting and testing. When set to `true`, all explored items have expanded information.
     public init(session: ProcessSession, tagThreadArenas: Bool = false) throws {
         guard 
             let map = session.map, 
@@ -56,6 +73,7 @@ public final class GlibcMallocAnalyzer {
         self.threadArenas = [:]
     }
 
+    /// Perform the analysis of the Glibc-malloc-allocated heap of the remote process.
     public func analyze() throws {
         if !exploredHeap.isEmpty {
             error("Warning: Discarding previous explored Glibc heap.")
@@ -70,6 +88,9 @@ public final class GlibcMallocAnalyzer {
         try traverseThreadArenaChunks()
     }
 
+    /// Filters the results in the `exloredHeap` for a certain thread. Only produces 
+    /// results if the `tagThreadArenas` is set to `true`.
+    /// - Parameter session: Process or Thread session
     public func view(for session: Session) throws -> [GlibcMallocRegion] {
         let requestedOrigin: GlibcMallocStateOrigin
         if let session = session as? ThreadSession {
@@ -85,6 +106,7 @@ public final class GlibcMallocAnalyzer {
         return exploredHeap.filter { $0.properties.origin.contains(requestedOrigin) }
     }
 
+    /// Uses the `main_arena` to localize thread arenas and schedule them for exploration.
     func localizeThreadArenas() throws {
         var currentBase = UInt(bitPattern: mainArena.buffer.next)
         while currentBase != mainArena.segment.lowerBound {
@@ -114,6 +136,7 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
+    /// Uses the `main_arena` to localize freed arenas and schedule them for exploration.
     func localizeFreedThreadArenas() throws {
         var nextBase = mainArena.buffer.next_free.flatMap(UInt.init(bitPattern:))
         while let currentBase = nextBase {
@@ -129,6 +152,8 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
+    /// Locates all the heap blocks for thread arenas. Those blocks are exclusive to the
+    /// thread arenas and are necessary when trying to locate chunks belonging to thread arenas.
     func analyzeThreadArenas() throws {
         let exploredCopy = exploredHeap
         for (index, region) in exploredCopy.enumerated() {
@@ -197,6 +222,8 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
+    /// Loads all fastbin chunk base addresses for given arena
+    /// - Parameter arenaBase: Base address of an arena that should be looked into
     private func analyzeFastBins(arenaBase: UInt) throws {
         let firstOffset = MemoryLayout<malloc_state>.offset(of: \.fastbinsY.0)!
         let fastbinPtrSize = MemoryLayout<mfastbinptr>.size
@@ -226,6 +253,8 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
+    /// Loads all bin chunk base addresses for given arena
+    /// - Parameter arenaBase: Base address of an arena that should be looked into
     private func analyzeBins(arenaBase: UInt) throws {
         let firstOffset = MemoryLayout<malloc_state>.offset(of: \.bins.0)!
         let binPtrSize = MemoryLayout<mchunkptr>.size * 2
@@ -254,6 +283,7 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
+    /// Locates tcache symbols and performs tcache analysis for all threads.
     private func analyzeTcache() throws {
         guard 
             let unloadedSymbols = session.unloadedSymbols,
@@ -268,6 +298,12 @@ public final class GlibcMallocAnalyzer {
             try analyzeTcacheFromTLS(of: threadSession, tCacheSymbol: tCacheSymbol)
         }
     }
+
+    /// Traverses array of potention tcache entries and if in any array item there is a chunk
+    /// stored, calls a function to travers the linked list of the stored chunks.
+    /// - Parameters:
+    ///   - taskSession: The thread on which the tcache should be explored
+    ///   - tCacheSymbol: The symbol representing the tcache used to compute its offset in TLS
     private func analyzeTcacheFromTLS(of taskSession: Session, tCacheSymbol: UnloadedSymbolInfo) throws {
         let tCacheLocation = try TbssSymbolGlibcLdHeuristic(session: taskSession, fileName: tCacheSymbol.file, tbssSymbolName: tCacheSymbol.name)
         let tCacheTLSPtr = try session.checkedLoad(of: swift_inspect_bridge__tcache_perthread_t.self, base: tCacheLocation.loadedSymbolBase)
@@ -299,6 +335,11 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
+    /// Iterates all chunks in the tcache linked list
+    /// - Parameters:
+    ///   - baseChunk: The first chunk in the tcache linked list
+    ///   - count: The expected number of items
+    ///   - taskSession: The session
     private func iterateTcacheChunks(from baseChunk: UInt, count: UInt16, taskSession: Session) throws {
         let chunkUserSpactOffset = UInt(MemoryLayout<malloc_chunk>.offset(of: \.fd)!)
 
@@ -322,6 +363,7 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
+    /// Executed function that locates all chunks in main arena.
     func traverseMainArenaChunks() throws {
         let topChunk = UInt(bitPattern: mainArena.buffer.top)
         guard let mainHeapMap = getMapIndex(for: topChunk) else {
@@ -333,6 +375,7 @@ public final class GlibcMallocAnalyzer {
         exploredHeap.append(contentsOf: chunks)
     }
 
+    /// Executed function that locates all chunks in thread arenas.
     func traverseThreadArenaChunks() throws {
         let exploredCopy = exploredHeap
         for (index, region) in exploredCopy.enumerated() {
@@ -355,7 +398,7 @@ public final class GlibcMallocAnalyzer {
                 assumedRange = threadArena.segment.upperBound..<topChunkBase
             }
 
-            // TODO: Check alignment validity!
+            // The first chunk must have a specific offset [1]
             if assumedRange.lowerBound % 16 != 0 {
                 let alignment = assumedRange.lowerBound % 16
                 assumedRange = (assumedRange.lowerBound + alignment)..<assumedRange.upperBound
@@ -374,6 +417,12 @@ public final class GlibcMallocAnalyzer {
         }
     }
 
+    /// Locates all the chunks in a specific region of memory. It is invariant, that there is a valid chunk
+    /// exactly at the beginning of the searched area.
+    /// - Parameters:
+    ///   - chunkArea: The area which should contain chunks.
+    ///   - threadHeapBase: If the arena which these chunks belong to is not main_arena, enter its base address.
+    /// - Returns: List of chunks.
     func traverseChunks(in chunkArea: Range<UInt>, threadHeapBase: UInt? = nil) throws -> [GlibcMallocRegion] {
         var chunks: [GlibcMallocRegion] = []
         var currentTop: UInt = chunkArea.lowerBound
@@ -418,6 +467,7 @@ public final class GlibcMallocAnalyzer {
         return chunks
     }
 
+    /// Gets index of item in the map (stored in the Session) that contains the address.
     func getMapIndex(for base: UInt) -> Int? {
         guard let index = session.map!.firstIndex(where: { $0.range.contains(base)} ) else {
             error("Warning: Didn't find map page for top chunk " + String(format: "0x%016lx", base))
