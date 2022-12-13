@@ -1,50 +1,62 @@
 # memtool
 
-Memtool (or rather libMemtoolCore) should provide babis for successful implementation of `swift-inspect` on Linux and beyond: the equivalent of "Memory Graph" on Linux. 
+Memtool (libMemtoolCore) is a Linux library, that utilizes `ptrace` and other techniques in order to read dynamic memory allocated via `glibc malloc`.
 
-## Aims
-The `swift-inspect` requires followin capabilities:
- - to peek memory [DONE]
- - to search for runtime address of a symbol [DONE]
- - to search for possible symbol names for a given runtime address [DONE]
- - to determine maximal length of string assuming provided pointer points at one [TODO: Glibc malloc]
- - to iterate heap blocks [TODO: Glibc malloc].
+## Description
 
-The most challenging part of this project is the ability "enumerate" malloc blocks. For this purpose it is assumed, that `Glibc` is the standard C library used. This project builds upon [whitepaper](
-https://www.forensicfocus.com/articles/linux-memory-forensics-dissecting-the-user-space-process-heap/) which analyzed how the `Glibc` malloc works and how to read the content of dynamic memory.
+This package contains three modules:
 
-Without introduction of malloc hooks, it can not be guaranteed, that all malloc blocks can be reached at all times. Especially mmapped blocks are the issue here.
+ - `Memtool` - a rudimentary interactive shell interface that is used mainly for prototyping, development and testing of the Memtool itself
+ - `MemtoolCore` - the most important part of the project - allows to read and analyze remote process
+ - `Cutils` - contains either function calls and macros that are impossible in Swift and copy-pasted private type definitions of `glibc`
 
-Ordered TODO list:
- - Assuming `main_arena` is known, traverse all reachable malloc chunks in all arenas. [DONE]
- - Tag chunks as freed [DONE]
-   - Tag fastbin chunks [DONE]
-   - Tag bin chunks [DONE]
-   - Tag tcache chunks [DONE]
-     - Read values from TLS [DONE]
-     - Read `tcache` [DONE]
-     - Move from UInt64 to UInt [DONE]
-     - Refactor workflow with session to support threads and make it more fluent [DONE]
-     - Traverse all threads and all `tcache`s with tests [DONE]
-   - Introduce tests for malloc [DONE]
- - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper). [IN PROGRESS]
-   - Traverse and tag `free` arenas [DONE] (Not covered by tests yet.)  
- - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present. [ABANDONED]
- - Add checks for validated and supported version of Glibc [DONE]
- - Incorporate libMemtoolCore into `swift-inspect`
- - Release version 1.0 of `memtool` and open PR on `apple/swift`
- - Using metadata from `swift-inspect`, create initial "Memory Graph" algorithm on Linux
- - Introduce system for heuristics for analyzing ARC retain cycles.
- - Expand interactive mode so it prints `.dot` graphs of memory
- - Create Plug-In system and create Plugin for `Glib/GObject` ARC
- - Replace `Swift.Process` calls with other possibilites (using `elf.h`, `dwarf.h`)
+The main goal of this package is to provide babis for successful implementation of `swift-inspect` on Linux and the equivalent of "Memory Graph" on Linux in future.
 
-## Limitations
-At this time, only Glibc x86-64 platform is targeted. There are no plans to implement support for any other platform.
+## Important considerations
+The project is at early stages of development, probably closer to "proof of concept" than "minimal viable product". Various tasks (around reading ELF and DWARF) are done via calls to other programs, like `bash`, `readelf`, `objdump`, `ls`, `cat` and `grep`. **The tests are invoking `clang`, compiling and executing code shipped in the test files.**
+This saved a lot of time during early stages of development but is not ideal.
+
+Therefore **before running tests on this library, make sure you are fine with all the `Swift.Process` calls!**
+
+The project is not yet capable of locating strictly speaking *all* of the malloc chunks. See *Status* section.
+
+At this time, only Glibc x86-64 platform is targeted. There are no plans to implement support for any other platform right now.
+
+## Installation
+Make sure that debuggin symbols are part of your `libc` and `ld` libraries (or install packages containing the stripped version).
+
+### CLI tool
+Use `swift build` and run the product.
+### As package dependency
+Add this dependency into your `Package.swift` file:
+```swift
+.package(url: "https://github.com/mikolasstuchlik/memtool", .branch("master")),
+```
+include `MemtoolCore` as a dependency:
+```swift
+.target(name: "<target>", dependencies: [
+    .product(name: "MemtoolCore", package: "memtool"),
+]),
+```
 
 ## Usage
-Run using `swift run`. Note, that in order to attach to a running process you need to have a priviledge. Simplest way is to use `sudo`.
 
+Since the `memtool` CLI reflects the internal implementation of the `MemtoolCore`, the usage is similar for both CLI and API. You should always make following steps:
+ 
+ - Attach to a process (via `PTRACE_ATTACH` and a bash call to `ls /proc/[pid]/task`)
+ - Load memory map of the process (bash call to `cat /proc/[pid]/maps`)
+ - Load symbols of the process (bash call to various executables `objdump -tL [executable]`)
+ - Invoke Glibc analysis.
+
+Assume traced program has PID `1234`
+
+### CLI
+Run the program with `sudo`:
+```
+sudo .build/debug/memtool
+```
+
+Available commands are listed when typing `help`. Notice, that **some commands require strings enclosed in " and some numbers are hexadecimal.**
 Interactive mode usage:
 ```
 ? help
@@ -68,36 +80,115 @@ Available operations:
   reveal   - [hexa pointer] Applies macro `REVEAL_PTR`
 ```
 
+Example usage:
+```bash
+? attach 1234   # Sends `PTRACE_ATTACH` to the process and threads
+? map           # Loads the memory map
+? symbol        # Loads symbols of loaded executables
+                # Probably some warning/errors will be printed to stderr
+? analyze       # Performs Glibc malloc analysis
+? status -a     # Prints the list of memory segments recognized by Glibc malloc analysis
+```
+
+### Swift API
+The intended usage for this project is via the API. The library makes as much types `public` as possible. For basic usage, here are listed the most important types:
+
+ - `class ProcessSession` - an instance of this class manages `ptrace` connection to a process
+ - `class GlibcMallocAnalyzer` - an instance of this class analyzes the Glibc mallc
+ - `struct BoundRemoteMemory<T>` - this struct descripbes region of memory of the remote process and allows the local process to read it's content **T is only valid as a C-based type!**
+ - `struct RawRemoteMemory` - this struct describes the region of memory of the remote process and allows the local process to read it's content as a contiguous array of UInt8
+ - `struct Chunk` - this struct loads a memory at a given address and attempts to load the chunk header as a `BoundRemoteMemory` and then the content of the chunk as a `RawRemoteMemory`
+
+Notice, that the `ProcessSession` conforms to the `Session` protocol which allows for `checkedLoad<T>(of:base:) throws -> BoundRemoteMemory<T>` and `checkedChunk(baseAddress:) throws -> Chunk` that provides safer API. Direct, unchecked, acces via `*RemoteMemory` and especially `Chunk` may lead to the crash of either traced or tracee.
+
+```swift
+let session = ProcessSession(pid: 1234)
+session.loadThreads()
+session.loadMap()
+session.loadSymbols()
+let glibcMallocExplorer = try GlibcMallocAnalyzer(session: session)
+glibcMallocExplorer.analyze()
+for heapItem in exploredHeap {
+  switch heapItem.rebound {
+    case .mallocState: // DO STUFF
+    case .heapInfo: // DO STUFF
+    case let .mallocChunk(chunkState): // DO STUFF
+  }
+}
+```
+
+Notice, that `heapItem` may not be a `malloc chunk` in all cases. It may be one of the book-keeping structs.
+
+## Status
+The `swift-inspect` requires followin capabilities:
+ - to peek memory [DONE]
+ - to search for runtime address of a symbol [DONE]
+ - to search for possible symbol names for a given runtime address [DONE]
+ - to determine maximal length of string assuming provided pointer points at one [DONE]
+ - to iterate heap blocks [DONE (with exceptions, see subsection *Mmapped*)].
+
+Ordered TODO list:
+ - Assuming `main_arena` is known, traverse all reachable malloc chunks in all arenas. [DONE]
+ - Tag chunks as freed [DONE]
+   - Tag fastbin chunks [DONE]
+   - Tag bin chunks [DONE]
+   - Tag tcache chunks [DONE]
+     - Read values from TLS [DONE]
+     - Read `tcache` [DONE]
+     - Move from UInt64 to UInt [DONE]
+     - Refactor workflow with session to support threads and make it more fluent [DONE]
+     - Traverse all threads and all `tcache`s with tests [DONE]
+   - Introduce tests for malloc [DONE]
+ - Introduce best-effort algorithm for locating mmapped chunks (based on whitepaper). [DEFERRED DONE (see subsection *Mmapped*)]
+   - Traverse and tag `free` arenas [DONE (Not covered by tests yet)]   
+ - Package in a tester program, that will determine offset of `main_arena` for given `Glibc` if debug symbols are not present. [ABANDONED]
+ - Add checks for validated and supported version of Glibc [DONE]
+ - Incorporate libMemtoolCore into `swift-inspect`
+ - Release version 1.0 of `memtool` and open PR on `apple/swift`
+ - Using metadata from `swift-inspect`, create initial "Memory Graph" algorithm on Linux
+ - Introduce system for heuristics for analyzing ARC retain cycles.
+ - Expand interactive mode so it prints `.dot` graphs of memory
+ - Create Plug-In system and create Plugin for `Glib/GObject` ARC
+ - Replace `Swift.Process` calls with other possibilites (using `elf.h`, `dwarf.h`)
+
+List of reminders:
+ - Add `_isPOD(_:)` check to `BoundRemoteMemory`
+
+## Discussion
+
+At the top level, there are two main approaches to keeping track of malloc chunks: introducing malloc/free hooks at the start of the process, or stopping the process at any time and analyzing memory belonging to it. This project attempts to implement the latter approach, because it fits more closely to the `swift-inspect` intended use.
+
+The first approach may one day be used, but it should be always evaluated whether the project stays withing a reasonable bounds and whether similar/better results may not be reached using regular debugger.
+
+The task of reaching all of the malloc chunks allocated by `glibc malloc` is constantly evolving. Chunks can be divided into several categories:
+ 
+ - book-kept chunks
+   - freed chunks
+   - active chunks
+ - mmapped chunks.
+
+**Book-kept chunks** are chunks, that are reachable usign instances of `malloc_state` structs (also called *arena*s). Those chunks are guaranteed to be reached if the system provides debugging symbols for the `libc` and `ld`. However, book-kep chunks might be in either *freed* or *active* state.
+
+**Freed chunks** are kept in the book-keeping `malloc_state` struct in either `fastbin` or `bin` lists. Tagging those chunks is as-easy as traversing the linked-lists. However, the chunks may also be kept in `tcache` which is a *thread local variable*. If `tcache` is not properly interpreted, the chunks may appear as active. Freed chunks might also be marged as free, if the **following** chunk has it's `isPreviousInUse` bit set.
+
+**Active chunks** are all chunks, that were reached and are not known to be freed.
+
+**Mmapped chunks** are chunks with large capacity (typically 128 ∗ 1024 bytes on x86 architectures)[1]. Those chunks are not book-kept by the `glibc`, but are directly requested from the OS. Reaching those chunks is non-trivial and may result in false-positives and false-negatives. It is unlikely, that any ARC object reaches this size, however. Therefore I feel comfortable deferring implementation of this feature at a later date.
+
+## Resources, Literature, Links
+*Notice, following literature is refered from the source code.*
+
+[1] Linux Memory Forensics: Dissecting the User Space Process Heap *16th October 2017* [https://www.forensicfocus.com/articles/linux-memory-forensics-dissecting-the-user-space-process-heap/](https://www.forensicfocus.com/articles/linux-memory-forensics-dissecting-the-user-space-process-heap/)
+[2] Malloc Internals, the Glibc wiki. *2022-08-09 17:51:50* [https://sourceware.org/glibc/wiki/MallocInternals](https://sourceware.org/glibc/wiki/MallocInternals)
+[3] fasterthanlime: Thread-local storage *Apr 26, 2020* [https://fasterthanli.me/series/making-our-own-executable-packer/part-13#c-programs](https://fasterthanli.me/series/making-our-own-executable-packer/part-13#c-programs)
+[4] The Glibc Source Code, generated *2022-Aug-24* [https://codebrowser.dev/glibc/glibc/](https://codebrowser.dev/glibc/glibc/)
+[5] `man proc` Linux 5.13 release *2021-08-27* [https://www.kernel.org/doc/man-pages/](https://www.kernel.org/doc/man-pages/)
+[6] `man objdump` binutils-2.39 *2022-12-01*
+[7] `man elf` Linux 5.13 release *2021-03-22* [https://www.kernel.org/doc/man-pages/](https://www.kernel.org/doc/man-pages/)
+[8] Chao-tic: A Deep dive into (implicit) Thread Local Storage *Dec 25, 2018* [Commit 046b398c85911835d89418c8d1b3098f740244a1](https://github.com/chao-tic/chao-tic.github.io/blob/master/_posts/2018-12-25-tls.markdown) [https://chao-tic.github.io/blog/2018/12/25/tls](https://chao-tic.github.io/blog/2018/12/25/tls)
+
 ## Note
 I welcome any contribution at any stage of development.
 
 I am aware, that there are tools and plugins for lldb and gdb (and other programs) that already acomplish similar results. I have tried many of them and none fits the purpose. I want this tool to be simple enought to be expanded by Swift developers. Having the requirement to understand (for example) lldb scripting, the scripting language itself and the issue itself seems to me like a big task. 
 This tool is intended for Swift developers, it provides almost no value to other languages.
-
-### Example of usage
-This example run show, how the main arena can be located at.
-```
-root@mikolas-pc:/home/mikolas/Developer/ptrace/memtool# .build/debug/memtool
-? attach 73675
-? status
-=== Session [73675]
-Map:
-[not loaded]
-
-Unloaded Symbols:
-[not loaded]
-
-Symbols:
-[not loaded]
-=== 
-? map
-? symbol
-? lookup "main_arena"
-Unloaded symbols: 
-UnloadedSymbolInfo(name: main_arena, file: /usr/lib/x86_64-linux-gnu/libc.so.6, location: 00000000001f6c60, flags: l     O, segment: .data, size: 0000000000000898)
-Loaded symbols: 
-Region(range: 00007fcd7d1f6c60 ..< 00007fcd7d1f74f8, properties: LoadedSymbolInfo(name: main_arena, flags: l     O, segment: .data))
-? peek malloc_state 00007fcd7d1f6c60
-BoundRemoteMemory<malloc_state>(segment: Range(140520544234592..<140520544236792), buffer: __C.malloc_state(mutex: 0, flags: 0, have_fastchunks: 1, fastbinsY: (nil, nil, Optional(0x000055e8b94ea320), Optional(0x000055e8b94eabf0), nil, nil, nil, nil, nil, nil), top: Optional(0x000055e8b94eb280), last_remainder: nil, bins: (Optional(0x00007fcd7d1f6cc0), Optional(0x00007fcd7d1f6cc0), Optional(0x00007fcd7d1f6cd0), Optional(0x00007fcd7d1f6cd0), Optional(0x00007fcd7d1f6ce0), Optional(0x00007fcd7d1f6ce0), Optional(0x00007fcd7d1f6cf0), Optional(0x00007fcd7d1f6cf0), Optional(0x00007fcd7d1f6d00), Optional(0x00007fcd7d1f6d00), Optional(0x00007fcd7d1f6d10), Optional(0x00007fcd7d1f6d10), Optional(0x00007fcd7d1f6d20), Optional(0x00007fcd7d1f6d20), Optional(0x00007fcd7d1f6d30), Optional(0x00007fcd7d1f6d30), Optional(0x00007fcd7d1f6d40), Optional(0x00007fcd7d1f6d40), Optional(0x00007fcd7d1f6d50), Optional(0x00007fcd7d1f6d50), Optional(0x00007fcd7d1f6d60), Optional(0x00007fcd7d1f6d60), Optional(0x00007fcd7d1f6d70), Optional(0x00007fcd7d1f6d70), Optional(0x00007fcd7d1f6d80), Optional(0x00007fcd7d1f6d80), Optional(0x00007fcd7d1f6d90), Optional(0x00007fcd7d1f6d90), Optional(0x00007fcd7d1f6da0), Optional(0x00007fcd7d1f6da0), Optional(0x00007fcd7d1f6db0), Optional(0x00007fcd7d1f6db0), Optional(0x00007fcd7d1f6dc0), Optional(0x00007fcd7d1f6dc0), Optional(0x00007fcd7d1f6dd0), Optional(0x00007fcd7d1f6dd0), Optional(0x00007fcd7d1f6de0), Optional(0x00007fcd7d1f6de0), Optional(0x00007fcd7d1f6df0), Optional(0x00007fcd7d1f6df0), Optional(0x00007fcd7d1f6e00), Optional(0x00007fcd7d1f6e00), Optional(0x00007fcd7d1f6e10), Optional(0x00007fcd7d1f6e10), Optional(0x00007fcd7d1f6e20), Optional(0x00007fcd7d1f6e20), Optional(0x00007fcd7d1f6e30), Optional(0x00007fcd7d1f6e30), Optional(0x00007fcd7d1f6e40), Optional(0x00007fcd7d1f6e40), Optional(0x00007fcd7d1f6e50), Optional(0x00007fcd7d1f6e50), Optional(0x00007fcd7d1f6e60), Optional(0x00007fcd7d1f6e60), Optional(0x00007fcd7d1f6e70), Optional(0x00007fcd7d1f6e70), Optional(0x00007fcd7d1f6e80), Optional(0x00007fcd7d1f6e80), Optional(0x00007fcd7d1f6e90), Optional(0x00007fcd7d1f6e90), Optional(0x00007fcd7d1f6ea0), Optional(0x00007fcd7d1f6ea0), Optional(0x00007fcd7d1f6eb0), Optional(0x00007fcd7d1f6eb0), Optional(0x00007fcd7d1f6ec0), Optional(0x00007fcd7d1f6ec0), Optional(0x00007fcd7d1f6ed0), Optional(0x00007fcd7d1f6ed0), Optional(0x00007fcd7d1f6ee0), Optional(0x00007fcd7d1f6ee0), Optional(0x00007fcd7d1f6ef0), Optional(0x00007fcd7d1f6ef0), Optional(0x00007fcd7d1f6f00), Optional(0x00007fcd7d1f6f00), Optional(0x00007fcd7d1f6f10), Optional(0x00007fcd7d1f6f10), Optional(0x00007fcd7d1f6f20), Optional(0x00007fcd7d1f6f20), Optional(0x00007fcd7d1f6f30), Optional(0x00007fcd7d1f6f30), Optional(0x00007fcd7d1f6f40), Optional(0x00007fcd7d1f6f40), Optional(0x00007fcd7d1f6f50), Optional(0x00007fcd7d1f6f50), Optional(0x00007fcd7d1f6f60), Optional(0x00007fcd7d1f6f60), Optional(0x00007fcd7d1f6f70), Optional(0x00007fcd7d1f6f70), Optional(0x00007fcd7d1f6f80), Optional(0x00007fcd7d1f6f80), Optional(0x00007fcd7d1f6f90), Optional(0x00007fcd7d1f6f90), Optional(0x00007fcd7d1f6fa0), Optional(0x00007fcd7d1f6fa0), Optional(0x00007fcd7d1f6fb0), Optional(0x00007fcd7d1f6fb0), Optional(0x00007fcd7d1f6fc0), Optional(0x00007fcd7d1f6fc0), Optional(0x00007fcd7d1f6fd0), Optional(0x00007fcd7d1f6fd0), Optional(0x00007fcd7d1f6fe0), Optional(0x00007fcd7d1f6fe0), Optional(0x00007fcd7d1f6ff0), Optional(0x00007fcd7d1f6ff0), Optional(0x00007fcd7d1f7000), Optional(0x00007fcd7d1f7000), Optional(0x00007fcd7d1f7010), Optional(0x00007fcd7d1f7010), Optional(0x00007fcd7d1f7020), Optional(0x00007fcd7d1f7020), Optional(0x00007fcd7d1f7030), Optional(0x00007fcd7d1f7030), Optional(0x00007fcd7d1f7040), Optional(0x00007fcd7d1f7040), Optional(0x00007fcd7d1f7050), Optional(0x00007fcd7d1f7050), Optional(0x00007fcd7d1f7060), Optional(0x00007fcd7d1f7060), Optional(0x00007fcd7d1f7070), Optional(0x00007fcd7d1f7070), Optional(0x00007fcd7d1f7080), Optional(0x00007fcd7d1f7080), Optional(0x00007fcd7d1f7090), Optional(0x00007fcd7d1f7090), Optional(0x00007fcd7d1f70a0), Optional(0x00007fcd7d1f70a0), Optional(0x00007fcd7d1f70b0), Optional(0x00007fcd7d1f70b0), Optional(0x00007fcd7d1f70c0), Optional(0x00007fcd7d1f70c0), Optional(0x00007fcd7d1f70d0), Optional(0x00007fcd7d1f70d0), Optional(0x00007fcd7d1f70e0), Optional(0x00007fcd7d1f70e0), Optional(0x00007fcd7d1f70f0), Optional(0x00007fcd7d1f70f0), Optional(0x00007fcd7d1f7100), Optional(0x00007fcd7d1f7100), Optional(0x00007fcd7d1f7110), Optional(0x00007fcd7d1f7110), Optional(0x00007fcd7d1f7120), Optional(0x00007fcd7d1f7120), Optional(0x00007fcd7d1f7130), Optional(0x00007fcd7d1f7130), Optional(0x00007fcd7d1f7140), Optional(0x00007fcd7d1f7140), Optional(0x00007fcd7d1f7150), Optional(0x00007fcd7d1f7150), Optional(0x00007fcd7d1f7160), Optional(0x00007fcd7d1f7160), Optional(0x00007fcd7d1f7170), Optional(0x00007fcd7d1f7170), Optional(0x00007fcd7d1f7180), Optional(0x00007fcd7d1f7180), Optional(0x00007fcd7d1f7190), Optional(0x00007fcd7d1f7190), Optional(0x00007fcd7d1f71a0), Optional(0x00007fcd7d1f71a0), Optional(0x00007fcd7d1f71b0), Optional(0x00007fcd7d1f71b0), Optional(0x00007fcd7d1f71c0), Optional(0x00007fcd7d1f71c0), Optional(0x00007fcd7d1f71d0), Optional(0x00007fcd7d1f71d0), Optional(0x00007fcd7d1f71e0), Optional(0x00007fcd7d1f71e0), Optional(0x00007fcd7d1f71f0), Optional(0x00007fcd7d1f71f0), Optional(0x00007fcd7d1f7200), Optional(0x00007fcd7d1f7200), Optional(0x00007fcd7d1f7210), Optional(0x00007fcd7d1f7210), Optional(0x00007fcd7d1f7220), Optional(0x00007fcd7d1f7220), Optional(0x00007fcd7d1f7230), Optional(0x00007fcd7d1f7230), Optional(0x00007fcd7d1f7240), Optional(0x00007fcd7d1f7240), Optional(0x00007fcd7d1f7250), Optional(0x00007fcd7d1f7250), Optional(0x00007fcd7d1f7260), Optional(0x00007fcd7d1f7260), Optional(0x00007fcd7d1f7270), Optional(0x00007fcd7d1f7270), Optional(0x00007fcd7d1f7280), Optional(0x00007fcd7d1f7280), Optional(0x00007fcd7d1f7290), Optional(0x00007fcd7d1f7290), Optional(0x00007fcd7d1f72a0), Optional(0x00007fcd7d1f72a0), Optional(0x00007fcd7d1f72b0), Optional(0x00007fcd7d1f72b0), Optional(0x00007fcd7d1f72c0), Optional(0x00007fcd7d1f72c0), Optional(0x00007fcd7d1f72d0), Optional(0x00007fcd7d1f72d0), Optional(0x00007fcd7d1f72e0), Optional(0x00007fcd7d1f72e0), Optional(0x00007fcd7d1f72f0), Optional(0x00007fcd7d1f72f0), Optional(0x00007fcd7d1f7300), Optional(0x00007fcd7d1f7300), Optional(0x00007fcd7d1f7310), Optional(0x00007fcd7d1f7310), Optional(0x00007fcd7d1f7320), Optional(0x00007fcd7d1f7320), Optional(0x00007fcd7d1f7330), Optional(0x00007fcd7d1f7330), Optional(0x00007fcd7d1f7340), Optional(0x00007fcd7d1f7340), Optional(0x00007fcd7d1f7350), Optional(0x00007fcd7d1f7350), Optional(0x00007fcd7d1f7360), Optional(0x00007fcd7d1f7360), Optional(0x00007fcd7d1f7370), Optional(0x00007fcd7d1f7370), Optional(0x00007fcd7d1f7380), Optional(0x00007fcd7d1f7380), Optional(0x00007fcd7d1f7390), Optional(0x00007fcd7d1f7390), Optional(0x00007fcd7d1f73a0), Optional(0x00007fcd7d1f73a0), Optional(0x00007fcd7d1f73b0), Optional(0x00007fcd7d1f73b0), Optional(0x00007fcd7d1f73c0), Optional(0x00007fcd7d1f73c0), Optional(0x00007fcd7d1f73d0), Optional(0x00007fcd7d1f73d0), Optional(0x00007fcd7d1f73e0), Optional(0x00007fcd7d1f73e0), Optional(0x00007fcd7d1f73f0), Optional(0x00007fcd7d1f73f0), Optional(0x00007fcd7d1f7400), Optional(0x00007fcd7d1f7400), Optional(0x00007fcd7d1f7410), Optional(0x00007fcd7d1f7410), Optional(0x00007fcd7d1f7420), Optional(0x00007fcd7d1f7420), Optional(0x00007fcd7d1f7430), Optional(0x00007fcd7d1f7430), Optional(0x00007fcd7d1f7440), Optional(0x00007fcd7d1f7440), Optional(0x00007fcd7d1f7450), Optional(0x00007fcd7d1f7450), Optional(0x00007fcd7d1f7460), Optional(0x00007fcd7d1f7460), Optional(0x00007fcd7d1f7470), Optional(0x00007fcd7d1f7470), Optional(0x00007fcd7d1f7480), Optional(0x00007fcd7d1f7480), Optional(0x00007fcd7d1f7490), Optional(0x00007fcd7d1f7490), Optional(0x00007fcd7d1f74a0), Optional(0x00007fcd7d1f74a0)), binmap: (0, 0, 0, 0), next: Optional(0x00007fcd74000030), next_free: nil, attached_threads: 1, system_mem: 135168, max_system_mem: 135168))
-? 
-```

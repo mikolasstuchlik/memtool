@@ -2,19 +2,40 @@ import Foundation
 import Cutils
 import Glibc
 
+/// MemoryTag contains metadata of the remote memory collected during
+/// various analysis steps. It is also used to determine, whether a load
+/// of a remote memory is known to be problematic.
 public struct MemoryTag {
+    /// Type, that has been previously bound to the remote memory in the 
+    /// tracing process.
     var type: Any.Type
 }
 
+/// Session is a reference-counted object, that manages (in a RAII way) the attachment
+/// to a remote process. It provides storage for analysis metadata and API for safer
+/// reading of the remote process. It represents a working unit for `ptrace`.
 public protocol Session: AnyObject {
+    /// The PID of the overall process.
     var pid: Int32 { get }
+    /// The PID or TID of the session that is used to issue requests to `ptracer`.
     var ptraceId: Int32 { get }
 
+    /// Map of the remote process memory containing all adresses that are valid for
+    /// the LAP of the remote process, and metadata associated with those adresses.
     var map: [MapRegion]? { get set }
+
+    /// Dictionary, that contains base address of the LAP of the remote process, to 
+    /// which an executable file was loaded.
     var executableFileBasePoints: [String: UInt]? { get set }
+
+    /// Symbols, that were obtained from ELF and DWARF for given executable file.
     var unloadedSymbols: [String: [UnloadedSymbolInfo]]? { get set }
+
+    /// Symbols, that represent a region in the traced process memory.
     var symbols: [SymbolRegion]? { set get }
 
+    /// Dictionary, that stores additional information for a given address of the 
+    /// remote process memory. These records are created during analysis.
     var tag: [UInt: MemoryTag] { get set }
 }
 
@@ -25,6 +46,12 @@ public enum SessionError: Error {
 }
 
 public extension Session {
+    /// Use this method to load a BoundRemoteMemory in a safer manner. Data stored in the 
+    /// `Session` object are consulted in order to determine, whether the load might be safe.
+    /// - Parameters:
+    ///   - type: Type bound to the data.
+    ///   - base: Base of the data in the remote process. 
+    ///   - skipMismatchTypeCheck: Set to true, in order to skip the checks, whether the type was previously bound to a different type.
     func checkedLoad<T>(of type: T.Type, base: UInt, skipMismatchTypeCheck: Bool = false) throws -> BoundRemoteMemory<T> {
         let range = base..<(base + UInt(MemoryLayout<T>.size))
 
@@ -44,6 +71,9 @@ public extension Session {
         return BoundRemoteMemory(pid: pid, load: base)
     }
 
+    /// Use this method to load a Chunk in a safer manner. Data stored in the `Session` object 
+    /// are consulted in order to determine, whether the load might be safe.
+    /// - Parameter baseAddress: Base of the data in the remote process. 
     func checkedChunk(baseAddress: UInt) throws -> Chunk {
         let header = try checkedLoad(of: malloc_chunk.self, base: baseAddress).buffer
         let endAddress = (baseAddress + Chunk.chunkContentEndOffset).addingReportingOverflow(header.size)
@@ -84,6 +114,7 @@ public final class ProcessSession: Session {
         swift_inspect_bridge__ptrace_syscall(pid)
     }
 
+    /// Loads map of LAP of the remote process. Fills `map` and `executableFileBasePoints`.
     public func loadMap() {
         map = Map.getMap(for: pid)
         executableFileBasePoints = [:]
@@ -107,7 +138,11 @@ public final class ProcessSession: Session {
         }
     }
 
+    /// Symbol types, that are resolved against the base address of their file and their location.
     public static let sectionsToResolve: Set<KnownSymbolSection> = [.bss, .data, .data1, .rodata, .rodata1, .text]
+
+    /// Loads symbols for executable files and computes their location in the LAP of the 
+    /// remote process. Fills `unloadedSymbols` and `symbols`.
     public func loadSymbols() {
         guard let maps = executableFileBasePoints else { return }
         let files = Array(maps.keys)
@@ -135,6 +170,8 @@ public final class ProcessSession: Session {
         }
     }
 
+    /// Loads the TIDs of threads associated with this process and creates ThreadSession
+    /// instances.
     public func loadThreads() {
         let threads = ThreadLoader(pid: pid)
         threadSessions = threads.threads.map { ThreadSession(tid: $0, owner: self) }
