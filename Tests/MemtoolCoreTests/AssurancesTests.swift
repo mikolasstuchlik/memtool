@@ -33,4 +33,9 @@ final class AssurancesTests: XCTestCase {
         XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .rDebug, in: session.unloadedSymbols!).isEmpty)
         XCTAssertFalse(GlibcAssurances.glibcOccurances(of: .errno, in: session.unloadedSymbols!).isEmpty)
     }
+
+    // Uncomment this test - the expected result is crash on `fatalError` in file `RemoteMemory.swift`
+    // func testBoundTypeSafety() {
+    //     let x = BoundRemoteMemory<UnsafeRawPointer>(pid: 0, load: 0)
+    // }
 }

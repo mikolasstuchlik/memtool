@@ -22,8 +22,10 @@ enum memtool {
 
 let operations: [Operation] = [
     attachOperation,
+    runOperation,
     detachOperation,
     statusOperation,
+    threadOperation,
     mapOperation,
     symbolOperation,
     helpOperation,
@@ -80,6 +82,46 @@ let attachOperation = Operation(keyword: "attach", help: "[PID] attempts to atta
     }
 
     ctx.session = ProcessSession(pid: pid)
+    ctx.session!.loadThreads()
+
+    return true
+}
+
+let runOperation = Operation(keyword: "run", help: "\"[path to executable]\" runs a new process, waits 5 seconds and attaches to it.") { input, ctx -> Bool in
+    guard input.hasPrefix("run") else {
+        return false
+    }
+    let payload = input.trimmingPrefix("run").trimmingCharacters(in: .whitespaces)
+    let components = payload.components(separatedBy: " ")
+    guard 
+        components.count == 1,
+        components[0].hasPrefix("\""), components[0].hasSuffix("\"")
+    else {
+        return false
+    }
+
+    let path = components[0].trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+
+    if ctx.session != nil {
+        MemtoolCore.error("Error: Already attached to a process.")
+        return true
+    }
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: path)
+
+    do {
+        try process.run()
+    } catch {
+        MemtoolCore.error("Error: Failed to run process, \(error)")
+        return true
+    }
+
+    sleep(5)
+
+    ctx.session = MemtoolCore.ProcessSession(pid: process.processIdentifier)
+    ctx.session!.loadThreads()
+    ctx.subprocess = process
 
     return true
 }
@@ -90,6 +132,8 @@ let detachOperation = Operation(keyword: "detach", help: "Detached from attached
     }
 
     ctx.session = nil
+    ctx.subprocess?.terminate()
+    ctx.subprocess = nil
 
     return true
 }
@@ -123,6 +167,46 @@ let statusOperation = Operation(keyword: "status", help: "[-m|-u|-l|-a] Prints c
         return false
     }
 
+
+    return true
+}
+
+let threadOperation = Operation(keyword: "thread", help: "[decimal TID/PID] Prints analysis status for TID/PID.") { input, ctx -> Bool in
+    guard input.hasPrefix("thread") else {
+        return false
+    }
+    let suffix = input.trimmingPrefix("thread").trimmingCharacters(in: .whitespaces)
+    guard let tid = Int32(suffix) else {
+        return false
+    }
+
+    guard let session = ctx.session else {
+        MemtoolCore.error("Error: Not attached to a session!")
+        return true
+    }
+
+    guard let explorer = ctx.glibcMallocExplorer else {
+        MemtoolCore.error("Error: Analysis not performed")
+        return true
+    }
+
+    let target: Session
+    if session.ptraceId == tid {
+        target = session
+    } else if let thread = session.threadSessions.first(where: { $0.ptraceId == tid }) {
+        target = thread
+    } else {
+        MemtoolCore.error("Error: No session for PID/TID \(tid)")
+        return true
+    }
+
+    do {
+        let view = try explorer.view(for: target)
+        print("View for PID/TID [\(tid)]:")
+        print(view.map(\.cliPrint).joined(separator: "\n"))
+    } catch {
+        MemtoolCore.error("Error: \(error)")
+    }
 
     return true
 }

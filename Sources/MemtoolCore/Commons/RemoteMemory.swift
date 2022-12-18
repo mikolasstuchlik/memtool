@@ -47,6 +47,7 @@ public struct BoundRemoteMemory<T> {
     ///   - baseAddress: Base address of the memory (length is deduced from the size of the type T)
     ///   - initialValue: Initial value for the buffer in the local process.
     public init(pid: Int32, load baseAddress: UInt, initialValue: T) {
+        Self.checkRuntimeSafety()
         self.segment = baseAddress..<(baseAddress + UInt(MemoryLayout<T>.size))
         var buffer = initialValue
         swift_inspect_bridge__ptrace_peekdata_initialize(pid, baseAddress, &buffer)
@@ -60,6 +61,7 @@ public struct BoundRemoteMemory<T> {
     ///   - pid: The PID of the process attached by the tracing process
     ///   - baseAddress: Base address of the memory (length is deduced from the size of the type T)
     public init(pid: Int32, load baseAddress: UInt) {
+        Self.checkRuntimeSafety()
         let segment = baseAddress..<(baseAddress + UInt(MemoryLayout<T>.size))
         let rawRemote = RawRemoteMemory(pid: pid, load: segment)
         self.init(bind: rawRemote)!
@@ -69,6 +71,7 @@ public struct BoundRemoteMemory<T> {
     /// are not fulfiled, **but is unsafe.**
     /// - Parameter rawMemory: 
     public init?(bind rawMemory: RawRemoteMemory) {
+        Self.checkRuntimeSafety()
         guard rawMemory.buffer.count == MemoryLayout<T>.size else {
             error("Error: Attempted to bind \(rawMemory) to differently sized type \(String(describing: T.self))")
             error("Error: \(rawMemory.buffer.count) =/= \(MemoryLayout<T>.size)")
@@ -88,6 +91,7 @@ public struct BoundRemoteMemory<T> {
     /// expected size.
     /// - Parameter rawMemory: 
     public init?(bindFromLarger rawMemory: RawRemoteMemory) {
+        Self.checkRuntimeSafety()
         guard rawMemory.buffer.count >= MemoryLayout<T>.size else {
             error("Error: Attempted to bind \(rawMemory) to differently larger type \(String(describing: T.self))")
             error("Error: \(rawMemory.buffer.count) < \(MemoryLayout<T>.size)")
@@ -98,6 +102,12 @@ public struct BoundRemoteMemory<T> {
         self.buffer = withUnsafeBytes(of: rawMemory.buffer) { ptr in
             let rebound = ptr.assumingMemoryBound(to: T.self)
             return rebound.first!    
+        }
+    }
+
+    static private func checkRuntimeSafety() {
+        guard _isPOD(T.self) else {
+            fatalError("Error: Attempt to initialize BoundRemoteMemory with type \(T.self) which requires Swift Runtime and would corrupt the program execution!")
         }
     }
 }

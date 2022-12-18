@@ -20,28 +20,28 @@ extension MemoryRange: CLIPrint {
 extension MemoryRegion: CLIPrint {
     var cliPrint: String {
         if let printable = properties as? CLIPrint {
-            return "Region(range: \(range.cliPrint), properties: \(printable.cliPrint))"
+            return "Region(range: \(range.cliPrint), properties: \(printable.cliPrint))".removingMemtoolMentions()
         } else {
-            return "Region(range: \(range.cliPrint), properties: \(properties))"
+            return "Region(range: \(range.cliPrint), properties: \(properties))".removingMemtoolMentions()
         }
     }
 }
 
 extension MapInfo: CLIPrint {
     var cliPrint: String {
-        "MapInfo(flags: \(flags.stringValue), offset: \(offset.cliPrint), device major: \(device.major), device minor: \(device.minor), inode: \(inode), pathname: \(pathname.rawValue))"
+        "MapInfo(flags: \(flags.stringValue), offset: \(offset.cliPrint), device major: \(device.major), device minor: \(device.minor), inode: \(inode), pathname: \(pathname.rawValue))".removingMemtoolMentions()
     }
 }
 
 extension UnloadedSymbolInfo: CLIPrint {
     var cliPrint: String {
-        "UnloadedSymbolInfo(name: \(name), file: \(file), location: \(location.cliPrint), flags: \(flags.rawValue), segment: \(segment.rawValue), size: \(size.cliPrint))"
+        "UnloadedSymbolInfo(name: \(name), file: \(file), location: \(location.cliPrint), flags: \(flags.rawValue), segment: \(segment.rawValue), size: \(size.cliPrint))".removingMemtoolMentions()
     }
 }
 
 extension LoadedSymbolInfo: CLIPrint {
     var cliPrint: String {
-        "LoadedSymbolInfo(name: \(name), flags: \(flags.rawValue), segment: \(segment.rawValue))"
+        "LoadedSymbolInfo(name: \(name), flags: \(flags.rawValue), segment: \(segment.rawValue))".removingMemtoolMentions()
     }
 }
 
@@ -59,9 +59,9 @@ Symbols:
 \(symbols?.map(\.cliPrint).joined(separator: "\n") ?? "[not loaded]")
 
 Threads:
-\(threadSessions.map(\.tid).map(String.init(_:)).joined(separator: " ")))
+\(threadSessions.map(\.tid).map(String.init(_:)).joined(separator: " "))
 === 
-"""
+""".removingMemtoolMentions()
     }
 }
 
@@ -76,6 +76,12 @@ Payload:
     content.buffer.map { String(format: "0x%02x", $0) }.joined(separator: " ")
 }())
 ===
-"""
+""".removingMemtoolMentions()
+    }
+}
+
+private extension String {
+    func removingMemtoolMentions() -> String {
+        self.replacingOccurrences(of: "MemtoolCore.", with: "")
     }
 }

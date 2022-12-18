@@ -18,18 +18,3 @@ let package = Package(
         .testTarget(name: "MemtoolCoreTests", dependencies: ["MemtoolCore"])
     ]
 )
-
-/*
-Notes:
-https://sourceware.org/glibc/wiki/MallocInternals
-https://github.com/scwuaptx/Pwngdb
-https://discord.com/channels/366022993882906624/366255222244507690/1034867401059225702
-https://www.forensicfocus.com/articles/linux-memory-forensics-dissecting-the-user-space-process-heap/
-
-
-Todo:
- - Implement heap iteration
- - Implement freed logic
- - Implement multiple arenas (non-main heap)
- - Implement implement support for huge allocs
-*/

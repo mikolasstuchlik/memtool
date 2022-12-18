@@ -4,6 +4,8 @@ import _StringProcessing
 
 extension Symbolication {
 
+    private static let firstLine = "SYMBOL TABLE:"
+
     private static let locationRef = Reference(Substring.self)
     private static let flagsRef = Reference(Substring.self)
     private static let segmentRef = Reference(Substring.self)
@@ -106,12 +108,22 @@ extension Symbolication {
     }
 
     public static func loadSymbols(for file: String) -> [UnloadedSymbolInfo] {
+        // This is just a workaround, so the program does not output Warnings where parsing is expected to fail
+        var iteratingSymbolTable = false
         return getElfDescription(file: file).components(separatedBy: "\n").compactMap { line -> UnloadedSymbolInfo? in
+            if line.hasPrefix(firstLine) {
+                iteratingSymbolTable = true
+                return nil
+            }
             guard !line.isEmpty else {
+                iteratingSymbolTable = false
+                return nil
+            }
+            guard iteratingSymbolTable else {
                 return nil
             }
             guard let result = try? regex.firstMatch(in: line) else {
-                error("Warning: Symbol failed to match regex: \(line)")
+                error("Warning: Symbol for file \(file) failed to match regex: \(line)")
                 return nil
             }
             return UnloadedSymbolInfo(

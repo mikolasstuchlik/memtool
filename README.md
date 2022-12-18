@@ -51,44 +51,7 @@ Since the `memtool` CLI reflects the internal implementation of the `MemtoolCore
 Assume traced program has PID `1234`
 
 ### CLI
-Run the program with `sudo`:
-```
-sudo .build/debug/memtool
-```
-
-Available commands are listed when typing `help`. Notice, that **some commands require strings enclosed in " and some numbers are hexadecimal.**
-Interactive mode usage:
-```
-? help
-Available operations:
-  attach   - [PID] attempts to attach to a process.
-  detach   - Detached from attached process.
-  status   - [-m|-u|-l|-a] Prints current session to stdout. Use -m for map, -u for unloaded symbols and -l for loaded symbols, -a for glibc malloc analysis result.
-  map      - Parse /proc/pid/maps file.
-  symbol   - Requires maps. Loads all symbols for all object files in memory.
-  help     - Shows available commands on stdout.
-  exit     - Stops the execution
-  lookup   - [-e] "[text]" searches symbols matching text. Use -e if you want only exact matches.
-  peek     - [typename] [hexa pointer] Peeks ans bind a memory to any of following types: ["malloc_state", "malloc_chunk", "_heap_info", "tcbhead_t", "dtv_pointer", "link_map", "r_debug", "link_map_private"]
-  addr     - [hexa pointer] Prints all entities that contain given address with offsets.
-  analyze  - Attempts to enumerate heap chubnks
-  chunk    - [hexa pointer] Attempts to load address as chunk and dumps it
-  tcb      - Locates and prints Thread Control Block for traced thread
-  word     - [decimal count] [hex pointer] [-a] Dumps given amount of 64bit words; Use [-a] if you want the result in ASCII (`count` will load be 8*count bit instad of 64*count bit). (Note: data are not adjusted for Big Endian.)
-  tbss     - "symbol name" "file name" Attempts to locate tbss symbol in a file
-  errnoGot - "glibc file name" Attempts to parse `errno` location from disassembly in order to verify results of other heuristics.
-  reveal   - [hexa pointer] Applies macro `REVEAL_PTR`
-```
-
-Example usage:
-```bash
-? attach 1234   # Sends `PTRACE_ATTACH` to the process and threads
-? map           # Loads the memory map
-? symbol        # Loads symbols of loaded executables
-                # Probably some warning/errors will be printed to stderr
-? analyze       # Performs Glibc malloc analysis
-? status -a     # Prints the list of memory segments recognized by Glibc malloc analysis
-```
+(-> Examples of the CLI usage)[Docs/CLI-example.md]
 
 ### Swift API
 The intended usage for this project is via the API. The library makes as much types `public` as possible. For basic usage, here are listed the most important types:
@@ -152,7 +115,7 @@ Ordered TODO list:
  - Replace `Swift.Process` calls with other possibilites (using `elf.h`, `dwarf.h`)
 
 List of reminders:
- - Add `_isPOD(_:)` check to `BoundRemoteMemory`
+ - Add `_isPOD(_:)` check to `BoundRemoteMemory` [DONE]
 
 ## Discussion
 
@@ -193,6 +156,8 @@ The task of reaching all of the malloc chunks allocated by `glibc malloc` is con
 [7] `man elf` Linux 5.13 release *2021-03-22* [https://www.kernel.org/doc/man-pages/](https://www.kernel.org/doc/man-pages/)
 
 [8] Chao-tic: A Deep dive into (implicit) Thread Local Storage *Dec 25, 2018* [Commit 046b398c85911835d89418c8d1b3098f740244a1](https://github.com/chao-tic/chao-tic.github.io/blob/master/_posts/2018-12-25-tls.markdown) [https://chao-tic.github.io/blog/2018/12/25/tls](https://chao-tic.github.io/blog/2018/12/25/tls)
+
+[9] scwuaptx/pwndbg - a plugin for GDB *no date* [https://github.com/scwuaptx/Pwngdb](https://github.com/scwuaptx/Pwngdb)
 
 ## Note
 I welcome any contribution at any stage of development.

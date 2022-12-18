@@ -22,8 +22,6 @@ public final class GlibcMallocAnalyzer {
     // Main arena is excluded from `exploredHeap`, because it is located in the Glibc .data section.
     public let mainArena: BoundRemoteMemory<malloc_state>
 
-    /// Tagging thread arenas is not necessary, but useful for troubleshooting and testing When set to `true`, all explored items have expanded information.
-    public let tagThreadArenas: Bool
     /// Thread arenas and their corresponding TBSS heuristic that determined their location
     public private(set) var threadArenas: [Int32: (base: UInt, tlsResult: TbssSymbolGlibcLdHeuristic)]
     /// Keys are base addresses of the chunks located in any of the tcaches. Values are the PID/TID of the
@@ -40,8 +38,7 @@ public final class GlibcMallocAnalyzer {
     /// Initializes the object with some of the data required for successful analysis.
     /// - Parameters:
     ///   - session: Process that shall be analyzed with maps and symbols loaded.
-    ///   - tagThreadArenas: Tagging thread arenas is not necessary, but useful for troubleshooting and testing. When set to `true`, all explored items have expanded information.
-    public init(session: ProcessSession, tagThreadArenas: Bool = false) throws {
+    public init(session: ProcessSession) throws {
         guard 
             let map = session.map, 
             let unloadedSymbols = session.unloadedSymbols,
@@ -62,7 +59,6 @@ public final class GlibcMallocAnalyzer {
             throw Error.onlySupportsGlibcMalloc
         }
 
-        self.tagThreadArenas = tagThreadArenas
         self.session = session
         self.mainArena = try session.checkedLoad(of: malloc_state.self, base: mainArena.range.lowerBound)
         self.threadArenas = [:]
@@ -88,8 +84,7 @@ public final class GlibcMallocAnalyzer {
         try traverseThreadArenaChunks()
     }
 
-    /// Filters the results in the `exloredHeap` for a certain thread. Only produces 
-    /// results if the `tagThreadArenas` is set to `true`.
+    /// Filters the results in the `exloredHeap` for a certain thread.
     /// - Parameter session: Process or Thread session
     public func view(for session: Session) throws -> [GlibcMallocRegion] {
         let requestedOrigin: GlibcMallocStateOrigin
@@ -117,8 +112,6 @@ public final class GlibcMallocAnalyzer {
             ))
             currentBase = UInt(bitPattern: threadArena.buffer.next)
         }
-
-        guard tagThreadArenas else { return }
 
         guard 
             let unloadedSymbols = session.unloadedSymbols,
