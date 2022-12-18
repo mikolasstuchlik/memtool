@@ -31,7 +31,7 @@ Available operations:
 ```
 
 ## Example: Malloc with frees in FastBin and TCache (main thread only)
-Source code: (MainHeapTests.swift)[../Tests/MemtoolCoreTests/MainHeapTests.swift]
+Source code: [MainHeapTests.testMallocFastbinFrees()](../Tests/MemtoolCoreTests/MainHeapTests.swift)
 
 ```bash
 mikolas@MIKI-U-NTBK:~/Developer/ptrace/memtool$ .build/debug/memtool # Notice, that since we are going to inspect a child process, we don't need `sudo`.
@@ -93,7 +93,7 @@ Content as ascii:
 
 
 ## Example: Malloc with frees in bin and TCache (main and becakground threads)
-Source code: (ThreadedHeapsTests.swift)[../Tests/MemtoolCoreTests/ThreadedHeapsTests.swift]
+Source code: [ThreadedHeapsTests.testMallocBinFrees()](../Tests/MemtoolCoreTests/ThreadedHeapsTests.swift)
 
 ```bash
 ? detach # We can kill the previous program and run a new one
