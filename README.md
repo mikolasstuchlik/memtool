@@ -51,7 +51,7 @@ Since the `memtool` CLI reflects the internal implementation of the `MemtoolCore
 Assume traced program has PID `1234`
 
 ### CLI
-(-> Examples of the CLI usage)[Docs/CLI-example.md]
+[-> Examples of the CLI usage](Docs/CLI-example.md)
 
 ### Swift API
 The intended usage for this project is via the API. The library makes as much types `public` as possible. For basic usage, here are listed the most important types:
