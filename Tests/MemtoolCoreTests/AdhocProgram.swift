@@ -80,6 +80,6 @@ final class AdhocProgram {
 
     deinit {
         runningProgram.terminate()
-        //try? FileManager.default.removeItem(at: programPath)
+        try? FileManager.default.removeItem(at: programPath)
     }
 }
