@@ -10,7 +10,7 @@ This package contains three modules:
  - `MemtoolCore` - the most important part of the project - allows to read and analyze remote process
  - `Cutils` - contains either function calls and macros that are impossible in Swift and copy-pasted private type definitions of `glibc`
 
-The main goal of this package is to provide babis for successful implementation of `swift-inspect` on Linux and the equivalent of "Memory Graph" on Linux in future.
+The main goal of this package is to provide basis for successful implementation of `swift-inspect` on Linux and the equivalent of "Memory Graph" on Linux in future.
 
 ## Important considerations
 The project is at early stages of development, probably closer to "proof of concept" than "minimal viable product". Various tasks (around reading ELF and DWARF) are done via calls to other programs, like `bash`, `readelf`, `objdump`, `ls`, `cat` and `grep`. **The tests are invoking `clang`, compiling and executing code shipped in the test files.**
