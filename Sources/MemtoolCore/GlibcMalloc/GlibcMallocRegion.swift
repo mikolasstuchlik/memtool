@@ -13,7 +13,7 @@ public enum GlibcMallocChunkState: Equatable {
     case heapTCache
 
     /// Chunk represents an active memory
-    var isActive: Bool {
+    public var isActive: Bool {
         switch self {
         case .mmapped, .heapActive:
             return true
@@ -35,7 +35,7 @@ public enum GlibcMallocAssumedRebound: Equatable {
 }
 
 /// Tags, that specify where some of the information of the region was found
-public enum GlibcMallocStateOrigin: Equatable {
+public enum GlibcMallocStateOrigin: Equatable { 
     /// The chunk was found in a tcache belonging to a thread
     case tlsTCacge(pthreadId: Int32)
     /// The chunk is part of the main heap

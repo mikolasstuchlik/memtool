@@ -132,7 +132,8 @@ public final class TbssSymbolGlibcLdHeuristic {
             let link = try session.checkedLoad(of: link_map.self, base: linkBase)
             let nameBase = UInt(bitPattern: link.buffer.l_name)
             let name = RawRemoteMemory(pid: session.pid, load: nameBase..<(nameBase + loadLimit))
-            let nameString = String(cString: Array(name.buffer))
+            let nameString = String(cString: Array(name.buffer) + [0]) // This is not ideal solution, ideally we would like to load whole c string
+            //let nameString = String(decoding: name.buffer, as: UTF8.self)
             // While debugging, it was discovered, that ld string contains only part of the path, "/lib/x86_64-linux-gnu/libc.so.6" instead of "/usr/lib/x86_64-linux-gnu/libc.so.6"
             if !nameString.isEmpty, file.hasSuffix(nameString) {
                 return link

@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "memtool",
     products: [
-        .library(name: "MemtoolCore", targets: ["MemtoolCore"]),
+        .library(name: "MemtoolCore", type: .dynamic, targets: ["MemtoolCore"]),
         .executable(name: "memtool", targets: ["memtool"])
     ],
     targets: [
