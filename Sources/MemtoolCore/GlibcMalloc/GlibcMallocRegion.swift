@@ -34,13 +34,26 @@ public enum GlibcMallocAssumedRebound: Equatable {
     case heapInfo
 }
 
+/// Tags, that specify where some of the information of the region was found
 public enum GlibcMallocStateOrigin: Equatable {
-    case tlsTCacge(pthreadId: Int32), mainHeap, threadHeap(base: UInt), freedArena
+    /// The chunk was found in a tcache belonging to a thread
+    case tlsTCacge(pthreadId: Int32)
+    /// The chunk is part of the main heap
+    case mainHeap
+    /// The chunk is part of a heap with following base address (might be used for troubleshooting, since
+    /// chunks in mmapped arenas can compute it's arena location via it's own address.)
+    case threadHeap(base: UInt)
+    /// The chunk was found in a freed thread arena.
+    case freedArena
 }
 
+/// Information associated with results of glibc malloc analysis.
 public struct GlibcMallocInfo: Equatable {
+    /// The C type represented by this memory region
     public var rebound: GlibcMallocAssumedRebound
+    /// Whether the Glibc Malloc heuristic already performed all searches on this memory
     public var explored: Bool
+    /// Some addition information about where the memory region is found and referenced.
     public var origin: [GlibcMallocStateOrigin]
 }
 

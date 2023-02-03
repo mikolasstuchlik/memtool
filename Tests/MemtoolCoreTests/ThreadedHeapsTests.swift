@@ -98,7 +98,7 @@ final class ThreadedHeapsTests: XCTestCase {
         XCTAssertNotNil(session.symbols)
         XCTAssertEqual(session.threadSessions.count, 3)
 
-        let analyzer = try GlibcMallocAnalyzer(session: session, tagThreadArenas: true)
+        let analyzer = try GlibcMallocAnalyzer(session: session)
         try analyzer.analyze()
 
         for thread in session.threadSessions {

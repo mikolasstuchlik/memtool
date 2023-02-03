@@ -1,8 +1,11 @@
 import Foundation
 
+/// Thread loader uses `ls` to search `/proc/[pid]/tasks` directory,
+/// parses the ids of the threads and stores them in the `threads` property.
 public final class ThreadLoader {
     public let pid: Int32
 
+    /// TIDs associated with the PID
     public private(set) var threads: [Int32]
     public init(pid: Int32) {
         self.pid = pid
