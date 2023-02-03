@@ -139,7 +139,7 @@ public final class ProcessSession: Session {
     }
 
     /// Symbol types, that are resolved against the base address of their file and their location.
-    public static let sectionsToResolve: Set<KnownSymbolSection> = [.bss, .data, .data1, .rodata, .rodata1, .text]
+    public static let sectionsToResolve: Set<KnownSymbolSection> = [.bss, .data, .data1, .rodata, .rodata1, .text, .dataRelRo]
 
     /// Loads symbols for executable files and computes their location in the LAP of the 
     /// remote process. Fills `unloadedSymbols` and `symbols`.

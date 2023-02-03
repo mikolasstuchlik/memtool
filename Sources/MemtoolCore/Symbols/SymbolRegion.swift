@@ -339,6 +339,8 @@ public enum KnownSymbolSection: String {
     case data = ".data"
     /// Initialized program memory
     case data1 = ".data1"
+    /// For reference: https://stackoverflow.com/questions/7029734/what-is-the-data-rel-ro-used-for
+    case dataRelRo = ".data.rel.ro"
     case debug = ".debug"
     case dtors = ".dtors"
     case `dynamic` = ".dynamic"
